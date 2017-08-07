@@ -14,6 +14,8 @@
   },
   "homepage": "https://github.com/minicreative/shopify-sync#readme",
   "dependencies": {
-    "node-schedule": "^1.2.3"
+    "async": "^2.5.0",
+    "node-schedule": "^1.2.3",
+    "shopify-api-node": "^2.7.0"
   }
 }
