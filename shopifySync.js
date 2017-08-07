@@ -17,8 +17,12 @@ var runAllJobs = function () {
 // Update Inventory: updates Shopify products using the API
 var updateInventory = function () {
 	console.log('Updating inventory...');
-	setupShopify();
-	console.log(shopify);
+
+	// setupShopify();
+	// shopify.product.list({ limit: 5 })
+	// 	.then(function (products) {
+	// 		console.log(products);
+	// 	});
 };
 
 // Get Orders: creates CSV based on incoming orders
