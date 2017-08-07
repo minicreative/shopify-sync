@@ -2,7 +2,7 @@
   "name": "shopify-sync",
   "version": "1.0.0",
   "description": "Shopify inventory handling",
-  "main": "server.js",
+  "main": "shopifySync.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/minicreative/shopify-sync.git"
@@ -12,5 +12,8 @@
   "bugs": {
     "url": "https://github.com/minicreative/shopify-sync/issues"
   },
-  "homepage": "https://github.com/minicreative/shopify-sync#readme"
+  "homepage": "https://github.com/minicreative/shopify-sync#readme",
+  "dependencies": {
+    "node-schedule": "^1.2.3"
+  }
 }
