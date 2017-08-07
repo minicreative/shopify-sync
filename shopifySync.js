@@ -3,6 +3,7 @@
 var nodeSchedule = require('node-schedule');
 var Shopify = require('shopify-api-node');
 var async = require('async');
+var papaparse = require('paraparse');
 var config = require('./config');
 
 // Jobs ========================================================================
@@ -17,6 +18,8 @@ var runAllJobs = function () {
 // Update Inventory: updates Shopify products using the API
 var updateInventory = function () {
 	console.log('Updating inventory...');
+
+
 
 	// setupShopify();
 	// shopify.product.list({ limit: 5 })
