@@ -1,54 +1,74 @@
 
-// Initialize libraries
-var nodeSchedule = require('node-schedule');
-var Shopify = require('shopify-api-node');
+// Initialize NPM libraries
 var async = require('async');
-var papaparse = require('paraparse');
+var NodeSchedule = require('node-schedule');
+
+// Initialize tools
+var tools = './tools/'
+var Files = require(tools+'files');
+
+// Initialize config
 var config = require('./config');
-
-// Jobs ========================================================================
-
-// All Jobs
-var runAllJobs = function () {
-	updateInventory();
-	getOrders();
-	updateShipments();
-};
-
-// Update Inventory: updates Shopify products using the API
-var updateInventory = function () {
-	console.log('Updating inventory...');
-
-
-
-	// setupShopify();
-	// shopify.product.list({ limit: 5 })
-	// 	.then(function (products) {
-	// 		console.log(products);
-	// 	});
-};
-
-// Get Orders: creates CSV based on incoming orders
-var getOrders = function () {
-	console.log('Getting orders...');
-
-};
-
-// Update Shipments: updates Shopify orders using the API
-var updateShipments = function () {
-	console.log('Updating shipments...');
-
-};
 
 // Functions ===================================================================
 
-var shopify = null;
-var setupShopify = function () {
-	if (!shopify) shopify = new Shopify({
-		shopName: config.shopifyShopName,
-		apiKey: config.shopifyAPIKey,
-		password: config.shopifyPassword
+// All Jobs
+function runAllJobs () {
+	console.log('Running all jobs at '+Date()+'...');
+	async.waterfall([
+	    updateInventory,
+	    getOrders,
+	    updateShipments,
+	], function (err, result) {
+	    if (err) console.log(err);
+		console.log('Done!');
 	});
+};
+
+// Update Inventory: updates Shopify products using the API
+function updateInventory (next) {
+	console.log('Updating inventory...');
+
+	// Initialize directory
+	var directory = config.directories.inventory;
+
+	// Waterfall
+	async.waterfall([
+
+		// Get files from directory
+		function (callback) {
+			Files.getFromDirectory(directory, function (err, files) {
+				callback(err, files);
+			});
+		},
+
+		// Handle each file
+		function (files, callback) {
+			async.each(files, function (file, callback) {
+				Files.handleInventory(file, function (err) {
+					callback(err);
+				});
+			}, function (err) {
+				callback(err, 'All files processed!');
+			})
+		},
+
+	], function (err, result) {
+		if (err) console.log(err);
+		else console.log(result);
+	});
+};
+
+// Get Orders: creates CSV based on incoming orders
+function getOrders (next) {
+	console.log('Getting orders...');
+	return next();
+};
+
+// Update Shipments: updates Shopify orders using the API
+function updateShipments (next) {
+	console.log('Updating shipments...');
+	return next();
 };
 
 // Run Program =================================================================
@@ -56,7 +76,7 @@ console.log('shopify-sync started at '+Date());
 runAllJobs();
 
 // Start schedule
-// var syncSchedule = nodeSchedule.scheduleJob(config.schedule, function () {
+// var syncSchedule = NodeSchedule.scheduleJob(config.schedule, function () {
 // 	console.log('Scheduled tasks started...')
 // 	runAllJobs();
 // });
