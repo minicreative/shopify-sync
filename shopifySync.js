@@ -6,6 +6,7 @@ var NodeSchedule = require('node-schedule');
 // Initialize tools
 var tools = './tools/'
 var Files = require(tools+'files');
+var Shopify = require(tools+'shopify');
 
 // Initialize config
 var config = require('./config');
@@ -16,18 +17,48 @@ var config = require('./config');
 function runAllJobs () {
 	console.log('Running all jobs at '+Date()+'...');
 	async.waterfall([
-	    updateInventory,
-	    getOrders,
-	    updateShipments,
-	], function (err, result) {
+
+		// Get products map
+		function (callback) {
+			getProductsMap(function (err, map) {
+				callback(err, map);
+			})
+		},
+
+		// Update inventory
+		function (map, callback) {
+			updateInventory(map, function (err) {
+				callback(err, map);
+			})
+		},
+
+		// Get orders
+		function (map, callback) {
+			getOrders(map, function (err) {
+				callback(err, map);
+			})
+		},
+
+		// Update Shipments
+		function (map, callback) {
+			updateShipments(map, function (err) {
+				callback(err, map);
+			});
+		}
+	], function (err) {
 	    if (err) console.log(err);
 		console.log('Done!');
 	});
 };
 
+function getProductsMap (next) {
+	Files.getProductsMap(function (err, map) {
+		next(err, map);
+	});
+};
+
 // Update Inventory: updates Shopify products using the API
-function updateInventory (next) {
-	console.log('Updating inventory...');
+function updateInventory (map, next) {
 
 	// Initialize directory
 	var directory = config.directories.inventory;
@@ -45,28 +76,30 @@ function updateInventory (next) {
 		// Handle each file
 		function (files, callback) {
 			async.each(files, function (file, callback) {
-				Files.handleInventory(file, function (err) {
+				Files.handleInventory({
+					'file': file,
+					'map': map,
+				}, function (err) {
 					callback(err);
 				});
 			}, function (err) {
-				callback(err, 'All files processed!');
+				callback(err);
 			})
 		},
 
-	], function (err, result) {
-		if (err) console.log(err);
-		else console.log(result);
+	], function (err) {
+		next(err);
 	});
 };
 
 // Get Orders: creates CSV based on incoming orders
-function getOrders (next) {
+function getOrders (map, next) {
 	console.log('Getting orders...');
 	return next();
 };
 
 // Update Shipments: updates Shopify orders using the API
-function updateShipments (next) {
+function updateShipments (map, next) {
 	console.log('Updating shipments...');
 	return next();
 };

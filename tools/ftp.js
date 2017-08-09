@@ -52,7 +52,13 @@ function getFTPFile({client, path}, next) {
 
 // Exports =====================================================================
 module.exports = {
-	'get': function ({client, path}, next) {getFTPFile({client, path}, next)},
-	'list': function ({client, directory}, next) {listFTPFiles({client, directory}, next)},
-	'setup': function (next) {setupFTP(next)},
+	'setup': function (next) {
+		setupFTP(next)
+	},
+	'get': function ({client, path}, next) {
+		getFTPFile({client, path}, next)
+	},
+	'list': function ({client, directory}, next) {
+		listFTPFiles({client, directory}, next)
+	},
 }
