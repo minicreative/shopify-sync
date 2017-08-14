@@ -18,9 +18,9 @@ function runAllJobs () {
 	console.log('Running all jobs at '+Date()+'...');
 	async.waterfall([
 
-		// Get products map
+		// Make products map
 		function (callback) {
-			getProductsMap(function (err, map) {
+			makeProductsMap(function (err, map) {
 				callback(err, map);
 			})
 		},
@@ -51,8 +51,9 @@ function runAllJobs () {
 	});
 };
 
-function getProductsMap (next) {
-	Files.getProductsMap(function (err, map) {
+// Make Products Maps: creates a UPC keyed hashmap of Shopify Proudct ID's
+function makeProductsMap (next) {
+	Files.makeProductsMap(function (err, map) {
 		next(err, map);
 	});
 };

@@ -50,15 +50,26 @@ function getFTPFile({client, path}, next) {
 	});
 };
 
+// Delete FTP File: deletes an FTP file using a path
+function deleteFTPFile({client, path}, next) {
+	console.log('Deleting '+path+'...');
+	client.delete(path, function (err) {
+		next(err);
+	});
+};
+
 // Exports =====================================================================
 module.exports = {
-	'setup': function (next) {
+	setup: function (next) {
 		setupFTP(next)
 	},
-	'get': function ({client, path}, next) {
+	get: function ({client, path}, next) {
 		getFTPFile({client, path}, next)
 	},
-	'list': function ({client, directory}, next) {
+	delete: function ({client, path}, next) {
+		deleteFTPFile({client, path}, next)
+	},
+	list: function ({client, directory}, next) {
 		listFTPFiles({client, directory}, next)
 	},
 }

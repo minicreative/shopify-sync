@@ -86,6 +86,17 @@ function getVariant ({client, id}, next) {
 		});
 };
 
+function setVariant({client, update}, next) {
+	console.log('Updating Shopify variant...');
+	client.productVariant.update(update.id, update.params)
+		.then(function (response) {
+			next(null);
+		})
+		.catch(function (err) {
+			next(err);
+		})
+}
+
 // Exports =====================================================================
 module.exports = {
 	setup: function (next) {
@@ -96,5 +107,8 @@ module.exports = {
 	},
 	getVariant: function ({client, id}, next) {
 		getVariant({client, id}, next)
+	},
+	setVariant: function ({client, update}, next) {
+		setVariant({client, update}, next);
 	},
 }

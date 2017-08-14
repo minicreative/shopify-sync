@@ -10,8 +10,8 @@ var FTP = require(tools+'ftp');
 
 // Functions ===================================================================
 
-// Get Products Map
-function getProductsMap (next) {
+// Make Products Map
+function makeProductsMap (next) {
 	console.log('Making products map...');
 
 	async.waterfall([
@@ -68,30 +68,57 @@ function handleInventoryFile ({file, map}, next) {
 			});
 		},
 
-		// Get updates from Shopify
+		// Get variant from Shopify for each row in file, make updates array
 		function (shopify, callback) {
 			var updates = new Array();
 			async.each(rows, function (row, callback) {
 
-				// Initialize UPC
+				// Initialize fields from row
 				var upc = row['(C)upc'];
+				var quantity = row['(E)quantity'];
+				var price = row['(F)MiscFlag'];
 
-				// Get saved variant
-				var variant = map[upc];
-				console.log(map);
-				console.log(variant);
+				// Get variant from map
+				var mapVariant = map[upc];
 
-				// Get each variant
-				Shopify.getVariant({
-					'client': shopify,
-					'id': variant.id,
-				}, function (err, response) {
-					conosle.log(response);
-					if (response) updates.push({
-						'id': variant.id,
-					});
-					callback(err);
-				})
+				// If variant is found in map...
+				if (mapVariant) {
+
+					// Get variant from Shopify
+					Shopify.getVariant({
+						'client': shopify,
+						'id': mapVariant.id,
+					}, function (err, variant) {
+
+						// If variant is found on Shopify, push information into updates array
+						if (variant) {
+
+							// Create update config
+							var update = {
+								'id': variant.id,
+								'upc': upc,
+								'params': {
+									'old_inventory_quantity': variant.inventory_quantity,
+									'inventory_quantity': quantity,
+									'compare_at_price': price,
+								},
+							};
+
+							// Push into updates array
+							updates.push(update);
+						}
+
+						// Callback to advance array
+						callback(err);
+					})
+				} else {
+
+					console.log(upc+' not found in saved inventory');
+
+					// Callback to advance array
+					callback();
+				}
+
 			}, function (err) {
 				callback(err, shopify, updates);
 			});
@@ -99,29 +126,39 @@ function handleInventoryFile ({file, map}, next) {
 
 		// Make updates on Shopify
 		function (shopify, updates, callback) {
-			console.log(updates);
-			// async.each(updates, function (update, callback) {
-			// 	Shopify.updateVariant({
-			//
-			// 	}, function (err) {
-			//
-			// 	});
-			// }, function (err) {
-			// 	callback(err);
-			// })
+			async.each(updates, function (update, callback) {
+				Shopify.setVariant({
+					'client': shopify,
+					'update': update,
+				}, function (err) {
+					if (!err) console.log(update.upc+' updated successfully!');
+					callback(err);
+				});
+			}, function (err) {
+				callback(err);
+			})
+		},
+
+		// Setup FTP server
+		function (callback) {
+			FTP.setup(function (err, ftp) {
+				callback(err, ftp);
+			});
 		},
 
 		// Delete file from server
-		function (callback) {
-
+		function (ftp, callback) {
+			FTP.delete({
+				'client': ftp,
+				'path': file.path
+			}, function (err) {
+				callback(err);
+			});
 		},
 
 	], function (err) {
 		next(err);
 	})
-
-
-
 };
 
 // Get Parsed CSVs from Directory: returns a formatted list of CSV files from an FTP directory
@@ -228,8 +265,8 @@ function fileIsCSV(file) {
 
 // Exports =====================================================================
 module.exports = {
-	getProductsMap: function (next) {
-		getProductsMap(next)
+	makeProductsMap: function (next) {
+		makeProductsMap(next)
 	},
 	getFromDirectory: function (directory, next) {
 		getParsedCSVsFromDirectory(directory, next)
