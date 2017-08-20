@@ -2,6 +2,7 @@
 // Initialize NPM libraries
 var async = require('async');
 var Shopify = require('shopify-api-node');
+var moment = require('moment');
 
 // Initialize config
 var config = require('./../config');

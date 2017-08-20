@@ -2,6 +2,7 @@
 // Initialize NPM libraries
 var Parse = require('babyparse');
 var async = require('async');
+var moment = require('moment');
 
 // Initialize tools
 var tools = './../tools/'
@@ -161,6 +162,33 @@ function handleInventoryFile ({file, map}, next) {
 	})
 };
 
+function getTimestampFile (path, next) {
+
+	async.waterfall([
+
+		// Setup FTP client
+		function (callback) {
+			FTP.setup(function (err, ftp) {
+				callback(err, ftp);
+			});
+		},
+
+		// Get timestamp file, parse, if null or send current time
+		function (ftp, callback) {
+			FTP.get({
+				'client': ftp,
+				'path': path,
+			}, function (err, timestampFile) {
+				if (!timestamp) timestamp = moment.get('x');
+				callback(err, timestamp);
+			})
+		}
+
+	], function (err, timestamp) {
+		next(err, timestamp);
+	})
+};
+
 // Get Parsed CSVs from Directory: returns a formatted list of CSV files from an FTP directory
 function getParsedCSVsFromDirectory (directory, next) {
 	console.log('Getting parsed files from directory...');
@@ -198,14 +226,11 @@ function getParsedCSVsFromDirectory (directory, next) {
 				// Skip over non .csv files without error
 				if (!fileIsCSV(item)) return callback();
 
-				// Setup FTP request
-				var ftpRequest = {
+				// Get FTP file as stream, then...
+				FTP.get({
 					'client': ftp,
 					'path': directory+item.name,
-				};
-
-				// Get FTP file as stream, then...
-				FTP.get(ftpRequest, function (err, stream) {
+				}, function (err, stream) {
 					if (err) return callback(err);
 
 					// Parse stream, then...

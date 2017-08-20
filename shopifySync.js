@@ -2,6 +2,7 @@
 // Initialize NPM libraries
 var async = require('async');
 var NodeSchedule = require('node-schedule');
+var moment = require('moment');
 
 // Initialize tools
 var tools = './tools/'
@@ -95,7 +96,33 @@ function updateInventory (map, next) {
 
 // Get Orders: creates CSV based on incoming orders
 function getOrders (map, next) {
-	console.log('Getting orders...');
+
+	async.waterfall([
+
+		// Get last order date
+		function (callback) {
+			var path = config.directories.timestamps+'/orders.txt';
+			Files.getTimestamp(path, function (err, timestamp) {
+				callback(err, ftp, timestamp);
+			})
+		},
+
+		// Setup Shopify client
+		function (ftp, timestamp, callback) {
+			Shopify.setup(function (err, shopify) {
+				callback(err, ftp, timestamp, shopify);
+			})
+		},
+
+		// Get orders since timestamp
+		function (ftp, timestamp, shopfiy, callback) {
+			Shopify.getOrders({
+				'client': ftp,
+			})
+		},
+
+	])
+
 	return next();
 };
 
