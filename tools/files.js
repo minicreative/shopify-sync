@@ -9,149 +9,176 @@ var tools = './../tools/'
 var Shopify = require(tools+'shopify');
 var FTP = require(tools+'ftp');
 
+// File Formats
+function getOrderRow() {
+	const orderObject = {
+		orderNumber: {
+			heading: 'PurchaseOrder',
+		},
+		name: {
+			heading: 'Name',
+		},
+		name2: {
+			heading: 'Name2',
+		},
+		address1: {
+			heading: 'Address1',
+		},
+		address2: {
+			heading: 'Address2',
+		},
+		city: {
+			heading: 'City',
+		},
+		state: {
+			heading: 'State',
+		},
+		zip: {
+			heading: 'Zip',
+		},
+		phone: {
+			heading: 'Phone#',
+		},
+		email: {
+			heading: 'EmailAddress',
+		},
+		shipMethod: {
+			heading: 'ShipMethod',
+		},
+		sku: {
+			heading: 'SKU',
+		},
+		quantity: {
+			heading: 'Qauntity',
+		},
+		price: {
+			heading: 'PRICE',
+		},
+		shipCost: {
+			heading: 'Freight',
+		},
+		tax: {
+			heading: 'SalesTax',
+		},
+		promo: {
+			heading: 'PromoCode',
+		},
+	};
+	return JSON.parse(JSON.stringify(orderObject));
+}
+
 // Functions ===================================================================
 
-// Make Products Map
-function makeProductsMap (next) {
-	console.log('Making products map...');
+function makeOrdersFile ({orders, path}, next) {
+	console.log('Making orders file...');
 
 	async.waterfall([
 
-		// Setup Shopify client
+		// Populate data array
 		function (callback) {
-			Shopify.setup(function (err, shopify) {
-				callback(err, shopify);
-			})
-		},
 
-		// Get all products from Shopify
-		function (shopify, callback) {
-			Shopify.getAllProducts({
-				'client': shopify,
-				'fields': "id,variants"
-			}, function (err, products) {
-				callback(err, products);
-			})
-		},
+			// Setup data
+			var data = new Array();
 
-		// Create map of products, save in localStorage
-		function (products, callback) {
-			var map = {};
-			for (var i in products) {
-				for (var j in products[i].variants) {
-					map[products[i].variants[j].sku] = {
-						'id': products[i].variants[j].id,
-						'quantity': products[i].variants[j].inventory_quantity
-					};
+			// Add headers to data
+			var headerObject = getOrderRow();
+			var headers = [];
+			for (var key in headerObject) headers.push(headerObject[key].heading);
+			data.push(headers);
+
+			// Add items to data
+			for (var i in orders) {
+
+				// Initialize order
+				var order = orders[i];
+
+				// Initialize shipping
+				var shipping = order.shipping_lines[0];
+
+				// Setup shipMethod
+				var shipMethod = null;
+				var shopifyShippingCode = shipping.source+shipping.code;
+				switch (shopifyShippingCode) {
+					case "uspsPriority": shipMethod = "502"; break;
+					case "uspsPriorityExpress": shipMethod = "503"; break;
+				}
+
+				// Setup promo information
+				var promo = "";
+				for (var j in order.discount_codes) {
+					promo += order.discount_codes[j].code;
+					if (j < order.discount_codes.length-1) promo += ","
+				}
+
+				// Iterate through order items
+				for (var k in order.line_items) {
+
+					// Initialize item
+					var item = order.line_items[k];
+
+					// Intialize row
+					var line = getOrderRow();
+
+					// Setup order number
+					line.orderNumber.value = order.name;
+
+					// Setup address & contact information
+					line.name.value = order.shipping_address.first_name;
+					line.name2.value = order.shipping_address.last_name;
+					line.address1.value = order.shipping_address.address1;
+					line.address2.value = order.shipping_address.address2;
+					line.city.value = order.shipping_address.city;
+					line.state.value = order.shipping_address.province;
+					line.zip.value = order.shipping_address.zip;
+					if (order.phone) line.phone.value = order.phone;
+					line.email.value = order.email;
+
+					// Setup ship method & freight
+					line.shipMethod.value = shipMethod;
+					line.shipCost.value = shipping.price;
+
+					// Setup item information
+					line.sku.value = item.sku;
+					line.quantity.value = item.quantity;
+					line.price.value = item.price;
+
+					// Setup tax & promo information
+					line.tax.value = order.total_tax;
+					line.promo.value = promo;
+
+					// Push line into row, push row into data
+					var row = [];
+					for (var key in line) {
+						if (line[key].value) row.push(line[key].value);
+						else row.push("");
+					}
+					data.push(row);
 				}
 			}
-			callback(null, map);
+
+			callback(null, data);
 		},
 
-	], function (err, map) {
-		next(err, map);
-	})
-};
-
-// Handle Inventory File
-function handleInventoryFile ({file, map}, next) {
-	console.log('Handling inventory file...');
-
-	// Initialize rows
-	var rows = file.data;
-
-	async.waterfall([
-
-		// Setup Shopify server
-		function (callback) {
-			Shopify.setup(function (err, shopify) {
-				callback(err, shopify);
-			});
-		},
-
-		// Get variant from Shopify for each row in file, make updates array
-		function (shopify, callback) {
-			var updates = new Array();
-			async.each(rows, function (row, callback) {
-
-				// Initialize fields from row
-				var upc = row['(C)upc'];
-				var quantity = row['(E)quantity'];
-				var price = row['(F)MiscFlag'];
-
-				// Get variant from map
-				var mapVariant = map[upc];
-
-				// If variant is found in map...
-				if (mapVariant) {
-
-					// Get variant from Shopify
-					Shopify.getVariant({
-						'client': shopify,
-						'id': mapVariant.id,
-					}, function (err, variant) {
-
-						// If variant is found on Shopify, push information into updates array
-						if (variant) {
-
-							// Create update config
-							var update = {
-								'id': variant.id,
-								'upc': upc,
-								'params': {
-									'old_inventory_quantity': variant.inventory_quantity,
-									'inventory_quantity': quantity,
-									'compare_at_price': price,
-								},
-							};
-
-							// Push into updates array
-							updates.push(update);
-						}
-
-						// Callback to advance array
-						callback(err);
-					})
-				} else {
-
-					console.log(upc+' not found in saved inventory');
-
-					// Callback to advance array
-					callback();
-				}
-
-			}, function (err) {
-				callback(err, shopify, updates);
-			});
-		},
-
-		// Make updates on Shopify
-		function (shopify, updates, callback) {
-			async.each(updates, function (update, callback) {
-				Shopify.setVariant({
-					'client': shopify,
-					'update': update,
-				}, function (err) {
-					if (!err) console.log(update.upc+' updated successfully!');
-					callback(err);
-				});
-			}, function (err) {
-				callback(err);
+		// Handle data with parser
+		function (data, callback) {
+			unparseData(data, function (err, file) {
+				callback(err, file);
 			})
 		},
 
-		// Setup FTP server
-		function (callback) {
+		// Setup FTP client
+		function (file, callback) {
 			FTP.setup(function (err, ftp) {
-				callback(err, ftp);
+				callback(err, file, ftp);
 			});
 		},
 
-		// Delete file from server
-		function (ftp, callback) {
-			FTP.delete({
+		// Write FTP file
+		function (file, ftp, callback) {
+			FTP.write({
 				'client': ftp,
-				'path': file.path
+				'path': path,
+				'file': file,
 			}, function (err) {
 				callback(err);
 			});
@@ -162,7 +189,8 @@ function handleInventoryFile ({file, map}, next) {
 	})
 };
 
-function getTimestampFile (path, next) {
+function getTimestamp ({path}, next) {
+	console.log('Getting timestamp...');
 
 	async.waterfall([
 
@@ -178,9 +206,28 @@ function getTimestampFile (path, next) {
 			FTP.get({
 				'client': ftp,
 				'path': path,
-			}, function (err, timestampFile) {
-				if (!timestamp) timestamp = moment.get('x');
-				callback(err, timestamp);
+			}, function (err, stream) {
+
+				// If file found, convert stream to timestamp
+				if (!err) {
+
+					// Set timestamp to string
+					var timestamp = '';
+
+					// Convert stream to string
+					stream.on('data', chunk => timestamp += chunk);
+
+					// When finished, parse string
+					stream.on('end', function () {
+						callback(null, timestamp);
+					});
+
+				}
+
+				// Otherwise, continue (file does not yet exist)
+				else {
+					callback();
+				}
 			})
 		}
 
@@ -189,8 +236,35 @@ function getTimestampFile (path, next) {
 	})
 };
 
-// Get Parsed CSVs from Directory: returns a formatted list of CSV files from an FTP directory
-function getParsedCSVsFromDirectory (directory, next) {
+function makeTimestamp ({path}, next) {
+	console.log('Writing timestamp...');
+
+	async.waterfall([
+
+		// Setup FTP client
+		function (callback) {
+			FTP.setup(function (err, ftp) {
+				callback(err, ftp);
+			});
+		},
+
+		// Get timestamp file, parse, if null or send current time
+		function (ftp, callback) {
+			FTP.write({
+				'client': ftp,
+				'path': path,
+				'file': moment().format(),
+			}, function (err, stream) {
+				callback(null);
+			})
+		}
+	], function (err) {
+		next(err);
+	})
+};
+
+// Get Parsed CSVs: returns a formatted list of CSV files from an FTP directory
+function getParsedCSVs ({path}, next) {
 	console.log('Getting parsed files from directory...');
 
 	var output = new Array();
@@ -208,7 +282,7 @@ function getParsedCSVsFromDirectory (directory, next) {
 		function (ftp, callback) {
 			FTP.list({
 				'client': ftp,
-				'directory': directory,
+				'path': path,
 			}, function (err, list) {
 				callback(err, ftp, list);
 			})
@@ -229,7 +303,7 @@ function getParsedCSVsFromDirectory (directory, next) {
 				// Get FTP file as stream, then...
 				FTP.get({
 					'client': ftp,
-					'path': directory+item.name,
+					'path': path+item.name,
 				}, function (err, stream) {
 					if (err) return callback(err);
 
@@ -239,7 +313,7 @@ function getParsedCSVsFromDirectory (directory, next) {
 
 						// Format file and add to output
 						output.push({
-							'path': directory+item.name,
+							'path': path+item.name,
 							'data': data
 						});
 						callback();
@@ -281,6 +355,19 @@ function parseStream (stream, next) {
 	});
 };
 
+// Unparse Data: unparses array of arrays into CSV string
+function unparseData(data, next) {
+	console.log('Unparsing file...');
+	var output = "";
+	for (var i in data) {
+		for (var j in data[i]) {
+			output += data[i][j]; if (j < data[i].length-1) output += ",";
+		}
+		output += "\n";
+	}
+	next(null, output);
+};
+
 // File Is CSV: checks if file is a CSV file
 function fileIsCSV(file) {
 	if (file.type != '-') return false;
@@ -290,13 +377,16 @@ function fileIsCSV(file) {
 
 // Exports =====================================================================
 module.exports = {
-	makeProductsMap: function (next) {
-		makeProductsMap(next)
+	getTimestamp: function ({path}, next) {
+		getTimestamp({path}, next)
 	},
-	getFromDirectory: function (directory, next) {
-		getParsedCSVsFromDirectory(directory, next)
+	makeTimestamp: function ({path}, next) {
+		makeTimestamp({path}, next)
 	},
-	handleInventory: function ({file, map}, next) {
-		handleInventoryFile({file, map}, next)
+	getParsedCSVs: function ({path}, next) {
+		getParsedCSVs({path}, next)
+	},
+	makeOrdersFile: function ({orders, path}, next) {
+		makeOrdersFile({orders, path}, next)
 	},
 };

@@ -35,9 +35,9 @@ function setupFTP (next) {
 };
 
 // List FTP Files: lists ftp files in directory
-function listFTPFiles ({client, directory}, next) {
-	console.log('Getting list of files from '+directory+'...');
-	client.list(directory, function (err, list) {
+function listFTPFiles ({client, path}, next) {
+	console.log('Getting list of files from '+path+'...');
+	client.list(path, function (err, list) {
 		next(err, list);
 	});
 };
@@ -58,6 +58,14 @@ function deleteFTPFile({client, path}, next) {
 	});
 };
 
+// Write FTP File: writes a file to an FTP
+function writeFTPFile({client, path, file}, next) {
+	console.log('Writing '+path+'...');
+	client.put(file, path, function (err) {
+		next(err);
+	});
+}
+
 // Exports =====================================================================
 module.exports = {
 	setup: function (next) {
@@ -66,10 +74,13 @@ module.exports = {
 	get: function ({client, path}, next) {
 		getFTPFile({client, path}, next)
 	},
+	write: function ({client, path, file}, next) {
+		writeFTPFile({client, path, file}, next)
+	},
 	delete: function ({client, path}, next) {
 		deleteFTPFile({client, path}, next)
 	},
-	list: function ({client, directory}, next) {
-		listFTPFiles({client, directory}, next)
+	list: function ({client, path}, next) {
+		listFTPFiles({client, path}, next)
 	},
 }

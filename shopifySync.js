@@ -19,66 +19,58 @@ function runAllJobs () {
 	console.log('Running all jobs at '+Date()+'...');
 	async.waterfall([
 
-		// Make products map
-		function (callback) {
-			makeProductsMap(function (err, map) {
-				callback(err, map);
-			})
-		},
-
 		// Update inventory
-		function (map, callback) {
-			updateInventory(map, function (err) {
-				callback(err, map);
+		function (callback) {
+			updateInventory(function (err) {
+				callback(err);
 			})
 		},
 
 		// Get orders
-		function (map, callback) {
-			getOrders(map, function (err) {
-				callback(err, map);
+		function (callback) {
+			getOrders(function (err) {
+				callback(err);
 			})
 		},
 
 		// Update Shipments
-		function (map, callback) {
-			updateShipments(map, function (err) {
-				callback(err, map);
+		function (callback) {
+			updateShipments(function (err) {
+				callback(err);
 			});
-		}
+		},
+
 	], function (err) {
 	    if (err) console.log(err);
 		console.log('Done!');
 	});
 };
 
-// Make Products Maps: creates a UPC keyed hashmap of Shopify Proudct ID's
-function makeProductsMap (next) {
-	Files.makeProductsMap(function (err, map) {
-		next(err, map);
-	});
-};
-
 // Update Inventory: updates Shopify products using the API
-function updateInventory (map, next) {
+function updateInventory (next) {
 
-	// Initialize directory
-	var directory = config.directories.inventory;
-
-	// Waterfall
 	async.waterfall([
 
 		// Get files from directory
 		function (callback) {
-			Files.getFromDirectory(directory, function (err, files) {
+			Files.getParsedCSVs({
+				'path': config.directories.inventory,
+			}, function (err, files) {
 				callback(err, files);
 			});
 		},
 
-		// Handle each file
+		// Get products map
 		function (files, callback) {
+			Shopify.makeProductsMap(function (err, map) {
+				next(err, files, map);
+			});
+		},
+
+		// Handle each file
+		function (files, map, callback) {
 			async.each(files, function (file, callback) {
-				Files.handleInventory({
+				Shopify.handleInventoryFile({
 					'file': file,
 					'map': map,
 				}, function (err) {
@@ -95,39 +87,56 @@ function updateInventory (map, next) {
 };
 
 // Get Orders: creates CSV based on incoming orders
-function getOrders (map, next) {
+function getOrders (next) {
 
 	async.waterfall([
 
 		// Get last order date
 		function (callback) {
-			var path = config.directories.timestamps+'/orders.txt';
-			Files.getTimestamp(path, function (err, timestamp) {
-				callback(err, ftp, timestamp);
-			})
-		},
-
-		// Setup Shopify client
-		function (ftp, timestamp, callback) {
-			Shopify.setup(function (err, shopify) {
-				callback(err, ftp, timestamp, shopify);
+			Files.getTimestamp({
+				'path': config.directories.timestamps+'orders.txt',
+			}, function (err, timestamp) {
+				callback(err, timestamp);
 			})
 		},
 
 		// Get orders since timestamp
-		function (ftp, timestamp, shopfiy, callback) {
-			Shopify.getOrders({
-				'client': ftp,
-			})
+		function (timestamp, callback) {
+			Shopify.getOrdersSinceTimestamp(timestamp, function (err, orders) {
+				callback(err, orders);
+			});
 		},
 
-	])
+		// Make orders file if orders are returned
+		function (orders, callback) {
+			if (orders.length) {
+				Files.makeOrdersFile({
+					'orders': orders,
+					'path': config.directories.orders+'ShopifyOrders'+moment().format('YYYY-MM-DD-HH-mm-ss')+'.csv',
+				}, function (err) {
+					callback(err);
+				})
+			} else {
+				callback();
+			}
+		},
 
-	return next();
+		// Make timestamp file
+		function (callback) {
+			Files.makeTimestamp({
+				'path': config.directories.timestamps+'orders.txt',
+			}, function (err) {
+				callback(err);
+			});
+		}
+
+	], function (err) {
+		next(err);
+	})
 };
 
 // Update Shipments: updates Shopify orders using the API
-function updateShipments (map, next) {
+function updateShipments (next) {
 	console.log('Updating shipments...');
 	return next();
 };
