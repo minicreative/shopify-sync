@@ -183,7 +183,7 @@ function getOrders (next) {
 			if (orders.length) {
 				Files.makeOrdersFile({
 					'orders': orders,
-					'path': config.directories.orders+'ShopifyOrders'+moment().format('YYYY-MM-DD-HH-mm-ss')+'.csv',
+					'path': config.directories.orders+'ShopifyOrders'+moment().format('YYYYMMDDHHmmss')+'.csv',
 				}, function (err) {
 					callback(err);
 				})

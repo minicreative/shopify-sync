@@ -201,13 +201,15 @@ function setVariant({client, update}, next) {
 
 function getOrder ({client, id}, next) {
 	console.log('Getting Shopify order...');
-	client.order.get(id)
-		.then(function (order) {
-			next(null, order);
-		})
-		.catch(function (err) {
-			next(err);
-		});
+	client.order.get(id, {
+		'fields': 'id,line_items',
+	})
+	.then(function (order) {
+		next(null, order);
+	})
+	.catch(function (err) {
+		next(err);
+	});
 };
 
 function makeFulfillment({client, update}, next) {
@@ -242,7 +244,7 @@ function handleInventoryFile ({file, map}, next) {
 			async.each(rows, function (row, callback) {
 
 				// Initialize fields from row
-				var upc = row['(C)upc'];
+				var upc = '0'+row['(C)upc'];
 				var quantity = row['(E)quantity'];
 				var price = row['(F)MiscFlag'];
 
@@ -368,20 +370,6 @@ function handleShipmentFile ({file, productsMap, ordersMap}, next) {
 				var tracking = shipment[0]['Tracking #'];
 				var method = shipment[0]['Method'];
 
-				// Get variant IDs for each shipment
-				var fulfillmentItems = [];
-				for (var i in shipment) {
-					var item = shipment[i];
-					var sku = item['SKU'];
-					var quantity = parseInt(item['Quantity'], 10);
-					var mapProduct = productsMap[sku];
-					if (mapProduct) fulfillmentItems.push({
-						'id': mapProduct.id,
-						'quantity': quantity,
-					});
-					else console.log(sku+' not found in inventory');
-				}
-
 				// Get order from ordersMap
 				var mapOrder = ordersMap[orderName];
 
@@ -397,6 +385,30 @@ function handleShipmentFile ({file, productsMap, ordersMap}, next) {
 						// If order is found on Shopify, push information into updates array
 						if (order) {
 
+							// Get line_item IDs for each shipment
+							var fulfillmentItems = [];
+							for (var i in shipment) {
+
+								// Get row from shipment
+								var item = shipment[i];
+
+								// Get UPC & quantity
+								var upc = '0'+item['SKU'];
+								var quantity = parseInt(item['Quantity'], 10);
+
+								// Scan order to match UPC with line_item
+								for (var j in order.line_items) {
+									if (order.line_items[j].sku == upc) {
+										fulfillmentItems.push({
+											'id': order.line_items[j].id,
+											'quantity': quantity
+										});
+									} else {
+										console.log(upc+' not found in order');
+									}
+								}
+							}
+
 							// Create update config
 							var update = {
 								'id': mapOrder.id,
@@ -404,7 +416,7 @@ function handleShipmentFile ({file, productsMap, ordersMap}, next) {
 								'params': {
 									'fulfillment': {
 										'tracking_number': tracking,
-										'tracking_compmany': method,
+										'tracking_company': method,
 										'line_items': fulfillmentItems,
 									},
 								},
@@ -459,7 +471,6 @@ function handleShipmentFile ({file, productsMap, ordersMap}, next) {
 			}, function (err) {
 				callback(err);
 			});
-			callback();
 		},
 
 	], function (err) {
