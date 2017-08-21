@@ -263,7 +263,6 @@ function makeTimestamp ({path}, next) {
 	})
 };
 
-// Get Parsed CSVs: returns a formatted list of CSV files from an FTP directory
 function getParsedCSVs ({path}, next) {
 	console.log('Getting parsed files from directory...');
 
@@ -331,7 +330,6 @@ function getParsedCSVs ({path}, next) {
 	})
 };
 
-// Parse Stream: parses ReadableStream file into JSON
 function parseStream (stream, next) {
 	console.log('Parsing file...');
 
@@ -355,7 +353,6 @@ function parseStream (stream, next) {
 	});
 };
 
-// Unparse Data: unparses array of arrays into CSV string
 function unparseData(data, next) {
 	console.log('Unparsing file...');
 	var output = "";
@@ -368,7 +365,6 @@ function unparseData(data, next) {
 	next(null, output);
 };
 
-// File Is CSV: checks if file is a CSV file
 function fileIsCSV(file) {
 	if (file.type != '-') return false;
 	if (file.name.substring(file.name.length - 4) != '.csv') return false;

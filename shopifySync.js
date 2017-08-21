@@ -19,11 +19,25 @@ function runAllJobs () {
 	console.log('Running all jobs at '+Date()+'...');
 	async.waterfall([
 
-		// Update inventory
+		// Get products map
 		function (callback) {
-			updateInventory(function (err) {
-				callback(err);
+			getProductsMap(function (err, productsMap) {
+				callback(err, productsMap);
 			})
+		},
+
+		// Update inventory
+		function (productsMap, callback) {
+			updateInventory(productsMap, function (err) {
+				callback(err, productsMap);
+			})
+		},
+
+		// Update Shipments
+		function (productsMap, callback) {
+			updateShipments(productsMap, function (err) {
+				callback(err);
+			});
 		},
 
 		// Get orders
@@ -33,21 +47,21 @@ function runAllJobs () {
 			})
 		},
 
-		// Update Shipments
-		function (callback) {
-			updateShipments(function (err) {
-				callback(err);
-			});
-		},
-
 	], function (err) {
 	    if (err) console.log(err);
 		console.log('Done!');
 	});
 };
 
+function getProductsMap (next) {
+	Shopify.makeProductsMap(function (err, productsMap) {
+		next(err, productsMap);
+	});
+};
+
 // Update Inventory: updates Shopify products using the API
-function updateInventory (next) {
+function updateInventory (productsMap, next) {
+	console.log('TASK ONE: Inventory updates');
 
 	async.waterfall([
 
@@ -60,34 +74,86 @@ function updateInventory (next) {
 			});
 		},
 
-		// Get products map
-		function (files, callback) {
-			Shopify.makeProductsMap(function (err, map) {
-				next(err, files, map);
-			});
-		},
-
 		// Handle each file
-		function (files, map, callback) {
-			async.each(files, function (file, callback) {
-				Shopify.handleInventoryFile({
-					'file': file,
-					'map': map,
+		function (files, callback) {
+			if (files.length) {
+				async.each(files, function (file, callback) {
+					Shopify.handleInventoryFile({
+						'file': file,
+						'map': productsMap,
+					}, function (err) {
+						callback(err);
+					});
 				}, function (err) {
 					callback(err);
 				});
-			}, function (err) {
-				callback(err);
-			})
+			} else {
+				callback(null);
+			}
 		},
 
 	], function (err) {
-		next(err);
+		if (!err) console.log('TASK ONE COMPLETE');
+		else console.log('TASK ONE FAILED');
+		next(err, productsMap);
 	});
+};
+
+// Update Shipments: updates Shopify orders using the API
+function updateShipments (productsMap, next) {
+	console.log('TASK TWO: Shipment updates');
+
+	async.waterfall([
+
+		// Get files from directory
+		function (callback) {
+			Files.getParsedCSVs({
+				'path': config.directories.shipments,
+			}, function (err, files) {
+				callback(err, files);
+			});
+		},
+
+		// Make orders map
+		function (files, callback) {
+			if (files.length) {
+				Shopify.makeOrdersMap(function (err, ordersMap) {
+					callback(err, files, ordersMap);
+				});
+			} else {
+				callback(null, files, null);
+			}
+		},
+
+		// Handle each file
+		function (files, ordersMap, callback) {
+			if (files.length) {
+				async.each(files, function (file, callback) {
+					Shopify.handleShipmentFile({
+						'file': file,
+						'ordersMap': ordersMap,
+						'productsMap': productsMap,
+					}, function (err) {
+						callback(err);
+					});
+				}, function (err) {
+					callback(err);
+				})
+			} else {
+				callback(null);
+			}
+		},
+
+	], function (err) {
+		if (!err) console.log('TASK TWO COMPLETE');
+		else console.log('TASK TWO FAILED');
+		next(err);
+	})
 };
 
 // Get Orders: creates CSV based on incoming orders
 function getOrders (next) {
+	console.log('TASK THREE: Inventory updates');
 
 	async.waterfall([
 
@@ -100,9 +166,14 @@ function getOrders (next) {
 			})
 		},
 
-		// Get orders since timestamp
+		// Get detailed orders since timestamp
 		function (timestamp, callback) {
-			Shopify.getOrdersSinceTimestamp(timestamp, function (err, orders) {
+			Shopify.getOrders({
+				'params': {
+					'created_at_min': timestamp,
+					'fields': "id,name,email,phone,shipping_address,discount_codes,shipping_lines,total_tax,line_items",
+				},
+			}, function (err, orders) {
 				callback(err, orders);
 			});
 		},
@@ -117,7 +188,7 @@ function getOrders (next) {
 					callback(err);
 				})
 			} else {
-				callback();
+				callback(null);
 			}
 		},
 
@@ -131,14 +202,10 @@ function getOrders (next) {
 		}
 
 	], function (err) {
+		if (!err) console.log('TASK THREE COMPLETE');
+		else console.log('TASK THREE FAILED');
 		next(err);
 	})
-};
-
-// Update Shipments: updates Shopify orders using the API
-function updateShipments (next) {
-	console.log('Updating shipments...');
-	return next();
 };
 
 // Run Program =================================================================

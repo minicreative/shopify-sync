@@ -25,22 +25,40 @@ function setupShopify (next) {
 };
 
 // Getters
-function getAllProducts({client, fields, pageSize}, next) {
+function getProducts({params}, next) {
 	console.log('Getting all products...');
 
-	// Initialize pageSize & output array
-	if (!pageSize) pageSize = 20;
-	if (!fields) fields = "id";
+	// Setup params
+	if (!params) params = {};
+
+	// Setup default params
+	if (!params.limit) params.limit = 10;
+
+	// Initialize output
 	var output = new Array();
 
 	// Waterfall
 	async.waterfall([
 
-		// Get count of products
+		// Setup Shopify if neccesary
 		function (callback) {
-			client.product.count()
+			setupShopify(function (err, client) {
+				callback(err, client);
+			});
+		},
+
+		// Get count of products
+		function (client, callback) {
+
+			// Setup count params
+			var countParams = JSON.parse(JSON.stringify(params));
+			delete countParams.limit;
+			delete countParams.fields;
+
+			// Get count
+			client.product.count(countParams)
 				.then(function (productCount) {
-					callback(null, productCount);
+					callback(null, client, productCount);
 				})
 				.catch(function (err) {
 					callback(err);
@@ -48,7 +66,7 @@ function getAllProducts({client, fields, pageSize}, next) {
 		},
 
 		// Make exhaustive product queries based on count
-		function (productCount, callback) {
+		function (client, productCount, callback) {
 
 			// Initialize count
 			var count = 0;
@@ -57,16 +75,94 @@ function getAllProducts({client, fields, pageSize}, next) {
 			async.whilst(function () {
 				return count < productCount;
 			}, function (callback) {
-				client.product.list({
-					'fields': fields,
-					'limit': pageSize,
-					'page': Math.floor(count/pageSize)+1
-				})
+
+				// Setup list params
+				params.page = Math.floor(count/params.limit)+1;
+
+				// List objects
+				client.product.list(params)
 				.then(function (products) {
 					for (var i in products) {
 						output.push(products[i]);
 						count++;
 					}
+					console.log(count+'/'+productCount+' products downloaded...');
+					callback();
+				})
+				.catch(function (err) {
+					callback(err);
+				})
+			}, function (err) {
+				callback(err)
+			})
+		}
+	], function (err) {
+		next(err, output);
+	})
+}
+
+function getOrders({params}, next) {
+	console.log('Getting orders...');
+
+	// Setup params
+	if (!params) params = {};
+
+	// Setup default params
+	if (!params.limit) params.limit = 10;
+
+	// Initialize output array
+	var output = new Array();
+
+	// Waterfall
+	async.waterfall([
+
+		// Setup Shopify if neccesary
+		function (callback) {
+			setupShopify(function (err, client) {
+				callback(err, client);
+			});
+		},
+
+		// Get count of orders
+		function (client, callback) {
+
+			// Setup count params
+			var countParams = JSON.parse(JSON.stringify(params));
+			delete countParams.limit;
+			delete countParams.fields;
+
+			// Get count
+			client.order.count(countParams)
+			.then(function (orderCount) {
+				callback(null, client, orderCount);
+			})
+			.catch(function (err) {
+				callback(err);
+			})
+		},
+
+		// Make exhaustive order queries based on count
+		function (client, orderCount, callback) {
+
+			// Initialize count
+			var count = 0;
+
+			// Exhaust products based on count
+			async.whilst(function () {
+				return count < orderCount;
+			}, function (callback) {
+
+				// Setup list params
+				params.page = Math.floor(count/params.limit)+1;
+
+				// Make request
+				client.order.list(params)
+				.then(function (orders) {
+					for (var i in orders) {
+						output.push(orders[i]);
+						count++;
+					}
+					console.log(count+'/'+orderCount+' orders downloaded...');
 					callback();
 				})
 				.catch(function (err) {
@@ -103,81 +199,27 @@ function setVariant({client, update}, next) {
 		})
 };
 
-function getOrdersSinceTimestamp(timestamp, next) {
-	if (timestamp) console.log('Getting orders since '+timestamp+'...');
-	else console.log('Getting orders since beginning...');
+function getOrder ({client, id}, next) {
+	console.log('Getting Shopify order...');
+	client.order.get(id)
+		.then(function (order) {
+			next(null, order);
+		})
+		.catch(function (err) {
+			next(err);
+		});
+};
 
-	// Initialize pageSize & output array
-	var pageSize = 20;
-	var fields = "id,name,email,phone,shipping_address,discount_codes,shipping_lines,total_tax,line_items";
-	var output = new Array();
-
-	// Waterfall
-	async.waterfall([
-
-		// Setup Shopify
-		function (callback) {
-			setupShopify(function (err, client) {
-				callback(err, client);
-			})
-		},
-
-		// Get count of orders
-		function (client, callback) {
-
-			// Setup config
-			var config = {};
-			if (timestamp) config.created_at_min = timestamp;
-
-			// Make request
-			client.order.count(config)
-			.then(function (orderCount) {
-				callback(null, client, orderCount);
-			})
-			.catch(function (err) {
-				callback(err);
-			})
-		},
-
-		// Make exhaustive order queries based on count
-		function (client, orderCount, callback) {
-
-			// Initialize count
-			var count = 0;
-
-			// Exhaust products based on count
-			async.whilst(function () {
-				return count < orderCount;
-			}, function (callback) {
-
-				// Setup config
-				var config = {
-					'fields': fields,
-					'limit': pageSize,
-					'page': Math.floor(count/pageSize)+1
-				};
-				if (timestamp) config.created_at_min = timestamp;
-
-				// Make request
-				client.order.list(config)
-				.then(function (orders) {
-					for (var i in orders) {
-						output.push(orders[i]);
-						count++;
-					}
-					callback();
-				})
-				.catch(function (err) {
-					callback(err);
-				})
-			}, function (err) {
-				callback(err)
-			})
-		}
-	], function (err) {
-		next(err, output);
-	})
-}
+function makeFulfillment({client, update}, next) {
+	console.log('Making Shopify fulfillment...');
+	client.fulfillment.create(update.id, update.params)
+		.then(function (response) {
+			next(null);
+		})
+		.catch(function (err) {
+			next(err);
+		})
+};
 
 function handleInventoryFile ({file, map}, next) {
 	console.log('Handling inventory file...');
@@ -226,7 +268,7 @@ function handleInventoryFile ({file, map}, next) {
 								'params': {
 									'old_inventory_quantity': variant.inventory_quantity,
 									'inventory_quantity': quantity,
-									'compare_at_price': price,
+									'price': price,
 								},
 							};
 
@@ -239,7 +281,7 @@ function handleInventoryFile ({file, map}, next) {
 					})
 				} else {
 
-					console.log(upc+' not found in saved inventory');
+					console.log(upc+' not found in inventory');
 
 					// Callback to advance array
 					callback();
@@ -287,8 +329,11 @@ function handleInventoryFile ({file, map}, next) {
 	})
 };
 
-function makeProductsMap (next) {
-	console.log('Making products map...');
+function handleShipmentFile ({file, productsMap, ordersMap}, next) {
+	console.log('Handling shipment file...');
+
+	// Initialize rows
+	var rows = file.data;
 
 	async.waterfall([
 
@@ -296,20 +341,149 @@ function makeProductsMap (next) {
 		function (callback) {
 			setupShopify(function (err, shopify) {
 				callback(err, shopify);
+			});
+		},
+
+		// Get variant from Shopify for each row in file, make updates array
+		function (shopify, callback) {
+
+			// Initialize updates array
+			var updates = new Array();
+
+			// Group rows into shipments
+			var shipments = {};
+			for (var i in rows) {
+				var tracking = rows[i]['Tracking #'];
+				if (!shipments[tracking]) shipments[tracking] = [];
+				shipments[tracking].push(rows[i]);
+			}
+			var shipmentsArray = [];
+			for (var key in shipments) shipmentsArray.push(shipments[key]);
+
+			// Find an order for each shimpment
+			async.each(shipmentsArray, function (shipment, callback) {
+
+				// Initialize fields from first shimpent
+				var orderName = shipment[0]['PO #'];
+				var tracking = shipment[0]['Tracking #'];
+				var method = shipment[0]['Method'];
+
+				// Get variant IDs for each shipment
+				var fulfillmentItems = [];
+				for (var i in shipment) {
+					var item = shipment[i];
+					var sku = item['SKU'];
+					var quantity = parseInt(item['Quantity'], 10);
+					var mapProduct = productsMap[sku];
+					if (mapProduct) fulfillmentItems.push({
+						'id': mapProduct.id,
+						'quantity': quantity,
+					});
+					else console.log(sku+' not found in inventory');
+				}
+
+				// Get order from ordersMap
+				var mapOrder = ordersMap[orderName];
+
+				// If variant is found in map...
+				if (mapOrder) {
+
+					// Get variant from Shopify
+					getOrder({
+						'client': shopify,
+						'id': mapOrder.id,
+					}, function (err, order) {
+
+						// If order is found on Shopify, push information into updates array
+						if (order) {
+
+							// Create update config
+							var update = {
+								'id': mapOrder.id,
+								'orderName': orderName,
+								'params': {
+									'fulfillment': {
+										'tracking_number': tracking,
+										'tracking_compmany': method,
+										'line_items': fulfillmentItems,
+									},
+								},
+							};
+
+							// Push into updates array
+							updates.push(update);
+						}
+
+						// Callback to advance array
+						callback(err);
+					})
+				} else {
+					console.log(orderName+' not found in orders');
+
+					// Callback to advance array
+					callback();
+				}
+
+			}, function (err) {
+				callback(err, shopify, updates);
+			});
+		},
+
+		// Make updates on Shopify
+		function (shopify, updates, callback) {
+			async.each(updates, function (update, callback) {
+				makeFulfillment({
+					'client': shopify,
+					'update': update,
+				}, function (err) {
+					if (!err) console.log(update.orderName+' updated successfully!');
+					callback(err);
+				});
+			}, function (err) {
+				callback(err);
 			})
 		},
 
+		// Setup FTP server
+		function (callback) {
+			FTP.setup(function (err, ftp) {
+				callback(err, ftp);
+			});
+		},
+
+		// Delete file from server
+		function (ftp, callback) {
+			FTP.delete({
+				'client': ftp,
+				'path': file.path
+			}, function (err) {
+				callback(err);
+			});
+			callback();
+		},
+
+	], function (err) {
+		next(err);
+	})
+};
+
+function makeProductsMap (next) {
+	console.log('Making products map...');
+
+	async.waterfall([
+
 		// Get all products from Shopify
-		function (shopify, callback) {
-			getAllProducts({
-				'client': shopify,
-				'fields': "id,variants"
+		function (callback) {
+			getProducts({
+				'params': {
+					'fields': "id,variants",
+				},
 			}, function (err, products) {
 				callback(err, products);
 			})
 		},
 
-		// Create map of products, save in localStorage
+		// Create map of products
 		function (products, callback) {
 			var map = {};
 			for (var i in products) {
@@ -328,13 +502,48 @@ function makeProductsMap (next) {
 	})
 };
 
+function makeOrdersMap (next) {
+	console.log('Making orders map...');
+
+	async.waterfall([
+
+		// Get all products from Shopify
+		function (callback) {
+			getOrders({
+				'params': {
+					'fields': "id,name",
+				},
+			}, function (err, orders) {
+				callback(err, orders);
+			})
+		},
+
+		// Create map of orders
+		function (orders, callback) {
+			var map = {};
+			for (var i in orders) {
+				map[orders[i].name] = {
+					'id': orders[i].id
+				};
+			}
+			callback(null, map);
+		},
+
+	], function (err, map) {
+		next(err, map);
+	})
+};
+
 // Exports =====================================================================
 module.exports = {
 	setup: function (next) {
 		setupShopify(next)
 	},
-	getAllProducts: function ({client, fields, pageSize}, next) {
-		getAllProducts({client, fields, pageSize}, next)
+	getProducts: function ({params}, next) {
+		getProducts({params}, next)
+	},
+	getOrders: function ({params}, next) {
+		getOrders({params}, next)
 	},
 	getVariant: function ({client, id}, next) {
 		getVariant({client, id}, next)
@@ -345,10 +554,13 @@ module.exports = {
 	handleInventoryFile: function ({file, map}, next) {
 		handleInventoryFile({file, map}, next)
 	},
+	handleShipmentFile: function ({file, productsMap, ordersMap}, next) {
+		handleShipmentFile({file, productsMap, ordersMap}, next)
+	},
 	makeProductsMap: function (next) {
 		makeProductsMap(next)
 	},
-	getOrdersSinceTimestamp: function (timestamp, next) {
-		getOrdersSinceTimestamp(timestamp, next)
+	makeOrdersMap: function (next) {
+		makeOrdersMap(next)
 	},
 }
