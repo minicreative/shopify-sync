@@ -605,10 +605,6 @@ function makeOrdersMap (next) {
 		},
 
 	], function (err, map) {
-		for (var key in map) {
-			console.log("ORDER =================================");
-			console.log(map[key]);
-		}
 		next(err, map);
 	})
 };

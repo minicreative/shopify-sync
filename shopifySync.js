@@ -233,9 +233,13 @@ function captureShippedOrders (next) {
 
 		// Capture orders
 		function (orders, callback) {
-			Shopify.captureOrders(orders, function (err) {
-				callback(err);
-			})
+			if (orders.length) {
+				Shopify.captureOrders(orders, function (err) {
+					callback(err);
+				})
+			} else {
+				callback(null);
+			}
 		},
 
 	], function (err) {
