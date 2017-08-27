@@ -3,7 +3,8 @@
 var FTP = require('ftp');
 
 // Initialize tools
-var tools = './../tools/'
+var tools = './../tools/';
+var Log = require(tools+'log');
 
 // Initialize config
 var config = require('./../config');

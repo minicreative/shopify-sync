@@ -1,22 +1,26 @@
+// Initialize config
+var config = require('./config');
 
 // Initialize NPM libraries
 var async = require('async');
 var NodeSchedule = require('node-schedule');
 var moment = require('moment');
+var SendGrid = require('sendgrid')(config.sendgridAPIKey);
 
 // Initialize tools
 var tools = './tools/'
 var Files = require(tools+'files');
 var Shopify = require(tools+'shopify');
-
-// Initialize config
-var config = require('./config');
+var Log = require(tools+'log');
 
 // Functions ===================================================================
 
 // All Jobs
 function runAllJobs () {
-	console.log('Running all jobs at '+Date()+'...');
+
+	// Print time of jobs
+	Log.log('Running all jobs at '+Date()+'...')
+
 	async.waterfall([
 
 		// Update inventory
@@ -48,14 +52,62 @@ function runAllJobs () {
 		},
 
 	], function (err) {
-	    if (err) console.log(err);
-		console.log('Done!');
+
+		// Log error
+	    if (err) Log.log(err);
+
+		// Email logs
+		emailLogs();
 	});
+};
+
+// Email logs
+function emailLogs () {
+	console.log('Emailing logs...');
+
+	// Get messages
+	var messages = Log.getLogs();
+
+	// Format array into string
+	var logString = "";
+	for (var i in messages) logString += messages[i] + "<br />";
+
+	// Setup email
+	var request = SendGrid.emptyRequest({
+		method: 'POST',
+		path: '/v3/mail/send',
+		body: {
+			personalizations: [{
+		        to: [{
+					email: config.logEmail,
+				}],
+				subject: 'Shopify-Sync logs '+moment().format('MM/DD/YYYY h:mm:ss a')
+			}],
+		    from: {
+				email: 'hello@minicreative.net'
+			},
+			content: [{
+		        type: 'text/html',
+		        value: logString
+			}],
+		},
+	});
+
+	// Send email
+	SendGrid.API(request, function (error, response) {
+		if (error) console.log('ERROR SENDING LOGS');
+		else console.log('Logs emailed to '+config.logEmail);
+
+		// Clear logs
+		Log.reset();
+	});
+
 };
 
 // Update Inventory: updates Shopify products using the API
 function updateInventory (next) {
-	console.log('TASK ONE: Inventory updates');
+	Log.log('');
+	Log.log('TASK ONE: Inventory updates');
 
 	async.waterfall([
 
@@ -93,20 +145,22 @@ function updateInventory (next) {
 					callback(err);
 				});
 			} else {
+				Log.log('No inventory files found');
 				callback(null);
 			}
 		},
 
 	], function (err) {
-		if (!err) console.log('TASK ONE COMPLETE');
-		else console.log('TASK ONE FAILED');
+		if (!err) Log.log('TASK ONE COMPLETE');
+		else Log.log('TASK ONE FAILED');
 		next(err);
 	});
 };
 
 // Get Orders: creates CSV based on incoming orders
 function getOrders (next) {
-	console.log('TASK TWO: Inventory updates');
+	Log.log('');
+	Log.log('TASK TWO: Inventory updates');
 
 	async.waterfall([
 
@@ -121,6 +175,7 @@ function getOrders (next) {
 
 		// Get detailed orders since timestamp
 		function (timestamp, callback) {
+			Log.log('Getting orders since '+timestamp);
 			Shopify.getOrders({
 				'params': {
 					'created_at_min': timestamp,
@@ -141,6 +196,7 @@ function getOrders (next) {
 					callback(err);
 				})
 			} else {
+				Log.log('No orders since last update.');
 				callback(null);
 			}
 		},
@@ -155,15 +211,16 @@ function getOrders (next) {
 		}
 
 	], function (err) {
-		if (!err) console.log('TASK TWO COMPLETE');
-		else console.log('TASK TWO FAILED');
+		if (!err) Log.log('TASK TWO COMPLETE');
+		else Log.log('TASK TWO FAILED');
 		next(err);
 	})
 };
 
 // Update Shipments: updates Shopify orders using the API
 function updateShipments (next) {
-	console.log('TASK THREE: Shipment updates');
+	Log.log('');
+	Log.log('TASK THREE: Shipment updates');
 
 	async.waterfall([
 
@@ -201,20 +258,22 @@ function updateShipments (next) {
 					callback(err);
 				})
 			} else {
+				Log.log('No shipment files found');
 				callback(null);
 			}
 		},
 
 	], function (err) {
-		if (!err) console.log('TASK THREE COMPLETE');
-		else console.log('TASK THREE FAILED');
+		if (!err) Log.log('TASK THREE COMPLETE');
+		else Log.log('TASK THREE FAILED');
 		next(err);
 	})
 };
 
 // Capture Completed Orders: page shipped orders and capture payment
 function captureShippedOrders (next) {
-	console.log('TASK FOUR: Capture shipped orders');
+	Log.log('');
+	Log.log('TASK FOUR: Capture shipped orders');
 
 	async.waterfall([
 
@@ -238,23 +297,22 @@ function captureShippedOrders (next) {
 					callback(err);
 				})
 			} else {
+				Log.log('No uncaptured orders found');
 				callback(null);
 			}
 		},
 
 	], function (err) {
-		if (!err) console.log('TASK FOUR COMPLETE');
-		else console.log('TASK FOUR FAILED');
+		if (!err) Log.log('TASK FOUR COMPLETE');
+		else Log.log('TASK FOUR FAILED');
 		next(err);
 	})
 }
 
 // Run Program =================================================================
 console.log('shopify-sync started at '+Date());
-runAllJobs();
 
 // Start schedule
-// var syncSchedule = NodeSchedule.scheduleJob(config.schedule, function () {
-// 	console.log('Scheduled tasks started...')
-// 	runAllJobs();
-// });
+var syncSchedule = NodeSchedule.scheduleJob(config.schedule, function () {
+	runAllJobs();
+});

@@ -8,6 +8,7 @@ var moment = require('moment');
 var tools = './../tools/'
 var Shopify = require(tools+'shopify');
 var FTP = require(tools+'ftp');
+var Log = require(tools+'log');
 
 // File Formats
 function getOrderRow() {
@@ -172,6 +173,7 @@ function makeOrdersFile ({orders, path}, next) {
 				'path': path,
 				'file': file,
 			}, function (err) {
+				if (!err) Log.log(path+file+ ' created');
 				callback(err);
 			});
 		},

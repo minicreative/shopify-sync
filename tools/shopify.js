@@ -9,13 +9,13 @@ var request = require('request');
 var tools = './../tools/'
 var FTP = require(tools+'ftp');
 var Files = require(tools+'files');
+var Log = require(tools+'log');
 
 // Initialize config
 var config = require('./../config');
 
 // Functions ===================================================================
 
-// Throttle
 function throttle (client, next) {
 	if (client.callLimits.remaining < 11) {
 		setTimeout(function () {
@@ -24,7 +24,6 @@ function throttle (client, next) {
 	} else next();
 };
 
-// Setup Shopify: makes a Shopify API client using config settings
 function setupShopify (next) {
 	console.log('Setting up Shopify client...');
 	next(null, new Shopify({
@@ -34,7 +33,6 @@ function setupShopify (next) {
 	}));
 };
 
-// Manual Shopify Order Request: makes a Shopify API request manually
 function manualShopifyOrderRequest({orderID, apiName, body}, next) {
 	var options = {
 		'method': "POST",
@@ -47,7 +45,6 @@ function manualShopifyOrderRequest({orderID, apiName, body}, next) {
 	})
 }
 
-// Getters
 function getProducts({params}, next) {
 	console.log('Getting all products...');
 
@@ -278,7 +275,7 @@ function captureOrders (orders, next) {
 						},
 					},
 				}, function (err, response) {
-					if (!err) console.log(order.name+' fulfilled successfully!');
+					if (!err) Log.log(order.name+' captured successfully!');
 					callback(err);
 				});
 			}, function (err) {
@@ -356,12 +353,12 @@ function handleInventoryFile ({file, map}, next) {
 						updates.push(update);
 					}
 
-					else console.log('No update needed for '+upc);
+					else Log.log('No update needed for '+upc);
 				}
 
 				// If varaint is not found in map...
 				else {
-					if (upc) console.log(upc+' not found in inventory');
+					if (upc) Log.log(upc+' not found in inventory');
 				}
 			}
 
@@ -375,7 +372,7 @@ function handleInventoryFile ({file, map}, next) {
 					'client': shopify,
 					'update': update,
 				}, function (err) {
-					if (!err) console.log(update.upc+' updated successfully!');
+					if (!err) Log.log(update.upc+' updated successfully!');
 					callback(err);
 				});
 			}, function (err) {
@@ -472,7 +469,7 @@ function handleShipmentFile ({file, map}, next) {
 							// Make fulfillment update
 							fulfillmentUpdates.push({
 								'id': mapOrder.id,
-								'orderName': key,
+								'name': key+': '+sku,
 								'params': {
 									'fulfillment': {
 										'tracking_number': tracking,
@@ -490,12 +487,12 @@ function handleShipmentFile ({file, map}, next) {
 
 						// Handle SKU not found
 						else {
-							console.log(sku+' not found in order '+key);
+							Log.log(sku+' not found in order '+key);
 						}
 					}
 
 				} else {
-					console.log(key+' not found in orders');
+					Log.log(key+' not found in orders');
 				}
 			}
 
@@ -509,7 +506,7 @@ function handleShipmentFile ({file, map}, next) {
 					'client': shopify,
 					'update': update,
 				}, function (err, response) {
-					if (!err) console.log(update.orderName+' fulfilled successfully!');
+					if (!err) Log.log(update.name+' fulfilled successfully!');
 					callback(err);
 				});
 			}, function (err) {
