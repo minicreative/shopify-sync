@@ -3,6 +3,7 @@
 var async = require('async');
 var Shopify = require('shopify-api-node');
 var moment = require('moment');
+var request = require('request');
 
 // Initialize tools
 var tools = './../tools/'
@@ -14,6 +15,15 @@ var config = require('./../config');
 
 // Functions ===================================================================
 
+// Throttle
+function throttle (client, next) {
+	if (client.callLimits.remaining < 11) {
+		setTimeout(function () {
+			next();
+		}, 5000);
+	} else next();
+};
+
 // Setup Shopify: makes a Shopify API client using config settings
 function setupShopify (next) {
 	console.log('Setting up Shopify client...');
@@ -23,6 +33,19 @@ function setupShopify (next) {
 		password: config.shopifyPassword
 	}));
 };
+
+// Manual Shopify Order Request: makes a Shopify API request manually
+function manualShopifyOrderRequest({orderID, apiName, body}, next) {
+	var options = {
+		'method': "POST",
+		'url': 'https://'+config.shopifyAPIKey+':'+config.shopifyPassword+'@'+config.shopifyShopName+'.myshopify.com/admin/orders/'+orderID+'/'+apiName+'.json',
+		'body': body,
+		'json': true,
+	};
+	request(options, function (err, response, body) {
+		next(err, body);
+	})
+}
 
 // Getters
 function getProducts({params}, next) {
@@ -80,17 +103,19 @@ function getProducts({params}, next) {
 				params.page = Math.floor(count/params.limit)+1;
 
 				// List objects
-				client.product.list(params)
-				.then(function (products) {
-					for (var i in products) {
-						output.push(products[i]);
-						count++;
-					}
-					console.log(count+'/'+productCount+' products downloaded...');
-					callback();
-				})
-				.catch(function (err) {
-					callback(err);
+				throttle(client, function () {
+					client.product.list(params)
+					.then(function (products) {
+						for (var i in products) {
+							output.push(products[i]);
+							count++;
+						}
+						console.log(count+'/'+productCount+' products downloaded...');
+						callback();
+					})
+					.catch(function (err) {
+						callback(err);
+					})
 				})
 			}, function (err) {
 				callback(err)
@@ -156,17 +181,19 @@ function getOrders({params}, next) {
 				params.page = Math.floor(count/params.limit)+1;
 
 				// Make request
-				client.order.list(params)
-				.then(function (orders) {
-					for (var i in orders) {
-						output.push(orders[i]);
-						count++;
-					}
-					console.log(count+'/'+orderCount+' orders downloaded...');
-					callback();
-				})
-				.catch(function (err) {
-					callback(err);
+				throttle(client, function () {
+					client.order.list(params)
+					.then(function (orders) {
+						for (var i in orders) {
+							output.push(orders[i]);
+							count++;
+						}
+						console.log(count+'/'+orderCount+' orders downloaded...');
+						callback();
+					})
+					.catch(function (err) {
+						callback(err);
+					})
 				})
 			}, function (err) {
 				callback(err)
@@ -177,51 +204,92 @@ function getOrders({params}, next) {
 	})
 }
 
-function getVariant ({client, id}, next) {
-	console.log('Getting Shopify variant...');
-	client.productVariant.get(id)
-		.then(function (variant) {
-			next(null, variant);
-		})
-		.catch(function (err) {
-			next(err);
-		});
-};
-
 function setVariant({client, update}, next) {
 	console.log('Updating Shopify variant...');
-	client.productVariant.update(update.id, update.params)
-		.then(function (response) {
-			next(null);
-		})
-		.catch(function (err) {
-			next(err);
-		})
+	throttle(client, function () {
+		client.productVariant.update(update.id, update.params)
+			.then(function (response) {
+				next(null);
+			})
+			.catch(function (err) {
+				next(err);
+			})
+	});
 };
 
 function getOrder ({client, id}, next) {
 	console.log('Getting Shopify order...');
-	client.order.get(id, {
-		'fields': 'id,line_items',
+	throttle(client, function () {
+		client.order.get(id, {
+			'fields': 'id,line_items',
+		})
+		.then(function (order) {
+			next(null, order);
+		})
+		.catch(function (err) {
+			next(err);
+		});
 	})
-	.then(function (order) {
-		next(null, order);
-	})
-	.catch(function (err) {
-		next(err);
-	});
 };
 
 function makeFulfillment({client, update}, next) {
 	console.log('Making Shopify fulfillment...');
-	client.fulfillment.create(update.id, update.params)
-		.then(function (response) {
-			next(null);
-		})
-		.catch(function (err) {
-			next(err);
-		})
+	manualShopifyOrderRequest({
+		'apiName': 'fulfillments',
+		'orderID': update.id,
+		'body': update.params,
+	}, function (err, response) {
+		next(err, response);
+	})
 };
+
+function makeTransaction({client, update}, next) {
+	console.log('Making Shopify transaction...');
+	manualShopifyOrderRequest({
+		'apiName': 'transactions',
+		'orderID': update.id,
+		'body': update.params,
+	}, function (err, response) {
+		next(err, response);
+	})
+};
+
+function captureOrders (orders, next) {
+	console.log('Capturing orders...');
+
+	async.waterfall([
+
+		function (callback) {
+			setupShopify(function (err, shopify) {
+				callback(err, shopify);
+			});
+		},
+
+		function (shopify, callback) {
+			async.eachSeries(orders, function (order, callback) {
+				makeTransaction({
+					'client': shopify,
+					'update': {
+						'id': order.id,
+						'params': {
+							'transaction': {
+								'kind': "capture"
+							}
+						},
+					},
+				}, function (err, response) {
+					if (!err) console.log(order.name+' fulfilled successfully!');
+					callback(err);
+				});
+			}, function (err) {
+				callback(err);
+			})
+		},
+	], function (err) {
+		next(err);
+	});
+
+}
 
 function handleInventoryFile ({file, map}, next) {
 	console.log('Handling inventory file...');
@@ -238,65 +306,71 @@ function handleInventoryFile ({file, map}, next) {
 			});
 		},
 
-		// Get variant from Shopify for each row in file, make updates array
+		// Make updates array
 		function (shopify, callback) {
+
+			// Initialize updates array
 			var updates = new Array();
-			async.each(rows, function (row, callback) {
+
+			// Loop through rows
+			for (var i in rows) {
+
+				// Initialize row
+				var row = rows[i];
 
 				// Initialize fields from row
-				var upc = '0'+row['(C)upc'];
+				var upc = row['(C)upc'];
 				var quantity = row['(E)quantity'];
-				var price = row['(F)MiscFlag'];
+				var regPrice = row['(F)RegPrice'];
+				var salePrice = row['(G)SalePrice'];
 
-				// Get variant from map
-				var mapVariant = map[upc];
-
-				// If variant is found in map...
-				if (mapVariant) {
-
-					// Get variant from Shopify
-					getVariant({
-						'client': shopify,
-						'id': mapVariant.id,
-					}, function (err, variant) {
-
-						// If variant is found on Shopify, push information into updates array
-						if (variant) {
-
-							// Create update config
-							var update = {
-								'id': variant.id,
-								'upc': upc,
-								'params': {
-									'old_inventory_quantity': variant.inventory_quantity,
-									'inventory_quantity': quantity,
-									'price': price,
-								},
-							};
-
-							// Push into updates array
-							updates.push(update);
-						}
-
-						// Callback to advance array
-						callback(err);
-					})
-				} else {
-
-					console.log(upc+' not found in inventory');
-
-					// Callback to advance array
-					callback();
+				// Setup SKU & mapVariant
+				var mapVariant = null;
+				if (upc) {
+					var sku = '0'+upc;
+					mapVariant = map[sku];
 				}
 
-			}, function (err) {
-				callback(err, shopify, updates);
-			});
+				// If variant is found in map & needs an update...
+				if (mapVariant) {
+
+					if (
+						mapVariant.quantity != quantity ||
+						mapVariant.price != salePrice ||
+						mapVariant.compare_at_price != regPrice
+					) {
+
+						// Create update config
+						var update = {
+							'id': mapVariant.id,
+							'upc': upc,
+							'params': {
+								'old_inventory_quantity': mapVariant.quantity,
+								'inventory_quantity': quantity,
+								'compare_at_price': regPrice,
+								'price': salePrice,
+							},
+						};
+
+						// Push into updates array
+						updates.push(update);
+					}
+
+					else console.log('No update needed for '+upc);
+				}
+
+				// If varaint is not found in map...
+				else {
+					if (upc) console.log(upc+' not found in inventory');
+				}
+			}
+
+			callback(null, shopify, updates);
 		},
 
-		// Make updates on Shopify
+		// Make updates on Shopify synchronously
 		function (shopify, updates, callback) {
-			async.each(updates, function (update, callback) {
+			async.eachSeries(updates, function (update, callback) {
 				setVariant({
 					'client': shopify,
 					'update': update,
@@ -306,7 +380,7 @@ function handleInventoryFile ({file, map}, next) {
 				});
 			}, function (err) {
 				callback(err);
-			})
+			});
 		},
 
 		// Setup FTP server
@@ -331,7 +405,7 @@ function handleInventoryFile ({file, map}, next) {
 	})
 };
 
-function handleShipmentFile ({file, productsMap, ordersMap}, next) {
+function handleShipmentFile ({file, map}, next) {
 	console.log('Handling shipment file...');
 
 	// Initialize rows
@@ -346,109 +420,96 @@ function handleShipmentFile ({file, productsMap, ordersMap}, next) {
 			});
 		},
 
-		// Get variant from Shopify for each row in file, make updates array
+		// Make updates array from shipments file
 		function (shopify, callback) {
 
-			// Initialize updates array
-			var updates = new Array();
+			// Initialize update arrays
+			var fulfillmentUpdates = new Array();
 
-			// Group rows into shipments
-			var shipments = {};
+			// Group rows into orders (only if PO # is provided - skips blank rows)
+			var orders = {};
 			for (var i in rows) {
-				var tracking = rows[i]['Tracking #'];
-				if (!shipments[tracking]) shipments[tracking] = [];
-				shipments[tracking].push(rows[i]);
+				var orderName = rows[i]['PO #'];
+				if (orderName) {
+					if (!orders[orderName]) orders[orderName] = [];
+					orders[orderName].push(rows[i]);
+				}
 			}
-			var shipmentsArray = [];
-			for (var key in shipments) shipmentsArray.push(shipments[key]);
 
-			// Find an order for each shimpment
-			async.each(shipmentsArray, function (shipment, callback) {
+			// Iterate through orders
+			for (var key in orders) {
 
-				// Initialize fields from first shimpent
-				var orderName = shipment[0]['PO #'];
-				var tracking = shipment[0]['Tracking #'];
-				var method = shipment[0]['Method'];
+				// Find key in ordersMap
+				var mapOrder = map[key];
 
-				// Get order from ordersMap
-				var mapOrder = ordersMap[orderName];
-
-				// If variant is found in map...
+				// Handle order if found in map
 				if (mapOrder) {
 
-					// Get variant from Shopify
-					getOrder({
-						'client': shopify,
-						'id': mapOrder.id,
-					}, function (err, order) {
+					// Initialize order array
+					var order = orders[key];
 
-						// If order is found on Shopify, push information into updates array
-						if (order) {
+					// Iterate through items in order
+					for (var i in order) {
 
-							// Get line_item IDs for each shipment
-							var fulfillmentItems = [];
-							for (var i in shipment) {
+						// Initialize item & sku
+						var item = order[i];
+						var sku = '0'+item['SKU'];
+						var tracking = item['Tracking #'];
+						var company = item['Method'];
+						var quantity = item['Quantity'];
 
-								// Get row from shipment
-								var item = shipment[i];
-
-								// Get UPC & quantity
-								var upc = '0'+item['SKU'];
-								var quantity = parseInt(item['Quantity'], 10);
-
-								// Scan order to match UPC with line_item
-								for (var j in order.line_items) {
-									if (order.line_items[j].sku == upc) {
-										fulfillmentItems.push({
-											'id': order.line_items[j].id,
-											'quantity': quantity
-										});
-									} else {
-										console.log(upc+' not found in order');
-									}
-								}
+						// Find matching line_item
+						var line_item = null;
+						for (var j in mapOrder.line_items) {
+							if (mapOrder.line_items[j].sku == sku) {
+								line_item = mapOrder.line_items[j]; break;
 							}
+						};
 
-							// Create update config
-							var update = {
+						// Make updates based on line item
+						if (line_item) {
+
+							// Make fulfillment update
+							fulfillmentUpdates.push({
 								'id': mapOrder.id,
-								'orderName': orderName,
+								'orderName': key,
 								'params': {
 									'fulfillment': {
 										'tracking_number': tracking,
-										'tracking_company': method,
-										'line_items': fulfillmentItems,
-									},
-								},
-							};
-
-							// Push into updates array
-							updates.push(update);
+										'tracking_company': company,
+										'line_items': [
+											{
+												'id': line_item.id,
+												'quantity': quantity
+											}
+										]
+									}
+								}
+							});
 						}
 
-						// Callback to advance array
-						callback(err);
-					})
+						// Handle SKU not found
+						else {
+							console.log(sku+' not found in order '+key);
+						}
+					}
+
 				} else {
-					console.log(orderName+' not found in orders');
-
-					// Callback to advance array
-					callback();
+					console.log(key+' not found in orders');
 				}
+			}
 
-			}, function (err) {
-				callback(err, shopify, updates);
-			});
+			callback(null, shopify, fulfillmentUpdates);
 		},
 
-		// Make updates on Shopify
-		function (shopify, updates, callback) {
-			async.each(updates, function (update, callback) {
+		// Make fulfillment updates on Shopify, collect responses for transaction updates
+		function (shopify, fulfillmentUpdates, callback) {
+			async.eachSeries(fulfillmentUpdates, function (update, callback) {
 				makeFulfillment({
 					'client': shopify,
 					'update': update,
-				}, function (err) {
-					if (!err) console.log(update.orderName+' updated successfully!');
+				}, function (err, response) {
+					if (!err) console.log(update.orderName+' fulfilled successfully!');
 					callback(err);
 				});
 			}, function (err) {
@@ -501,7 +562,9 @@ function makeProductsMap (next) {
 				for (var j in products[i].variants) {
 					map[products[i].variants[j].sku] = {
 						'id': products[i].variants[j].id,
-						'quantity': products[i].variants[j].inventory_quantity
+						'quantity': products[i].variants[j].inventory_quantity,
+						'price': products[i].variants[j].price,
+						'compare_at_price': products[i].variants[j].compare_at_price,
 					};
 				}
 			}
@@ -522,7 +585,7 @@ function makeOrdersMap (next) {
 		function (callback) {
 			getOrders({
 				'params': {
-					'fields': "id,name",
+					'fields': "id,name,line_items",
 				},
 			}, function (err, orders) {
 				callback(err, orders);
@@ -534,13 +597,18 @@ function makeOrdersMap (next) {
 			var map = {};
 			for (var i in orders) {
 				map[orders[i].name] = {
-					'id': orders[i].id
+					'id': orders[i].id,
+					'line_items': orders[i].line_items
 				};
 			}
 			callback(null, map);
 		},
 
 	], function (err, map) {
+		for (var key in map) {
+			console.log("ORDER =================================");
+			console.log(map[key]);
+		}
 		next(err, map);
 	})
 };
@@ -556,17 +624,17 @@ module.exports = {
 	getOrders: function ({params}, next) {
 		getOrders({params}, next)
 	},
-	getVariant: function ({client, id}, next) {
-		getVariant({client, id}, next)
-	},
 	setVariant: function ({client, update}, next) {
 		setVariant({client, update}, next)
 	},
 	handleInventoryFile: function ({file, map}, next) {
 		handleInventoryFile({file, map}, next)
 	},
-	handleShipmentFile: function ({file, productsMap, ordersMap}, next) {
-		handleShipmentFile({file, productsMap, ordersMap}, next)
+	handleShipmentFile: function ({file, map}, next) {
+		handleShipmentFile({file, map}, next)
+	},
+	captureOrders: function (orders, next) {
+		captureOrders(orders, next)
 	},
 	makeProductsMap: function (next) {
 		makeProductsMap(next)

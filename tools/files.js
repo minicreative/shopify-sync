@@ -49,7 +49,7 @@ function getOrderRow() {
 			heading: 'SKU',
 		},
 		quantity: {
-			heading: 'Qauntity',
+			heading: 'Quantity',
 		},
 		price: {
 			heading: 'PRICE',
@@ -95,28 +95,6 @@ function makeOrdersFile ({orders, path}, next) {
 				// Initialize shipping
 				var shipping = order.shipping_lines[0];
 
-				// Setup shipMethod
-				var shipMethod = null;
-				var shopifyShippingCode = shipping.source+shipping.code;
-				switch (shopifyShippingCode) {
-					case "ups01": shipMethod = "UPS Next Day Air"; break;
-					case "ups02": shipMethod = "UPS 2nd Day Air"; break;
-					case "ups03": shipMethod = "UPS Ground"; break;
-					case "ups07": shipMethod = "UPS Worldwide Express"; break;
-					case "ups08": shipMethod = "UPS Worldwide Expedited"; break;
-					case "ups11": shipMethod = "UPS Standard"; break;
-					case "ups12": shipMethod = "UPS 3 Day Select"; break;
-					case "ups13": shipMethod = "UPS Next Day Air Saver"; break;
-					case "ups14": shipMethod = "UPS Next Day Air Early A.M."; break;
-					case "ups54": shipMethod = "UPS Worldwide Express Plus"; break;
-					case "ups59": shipMethod = "UPS 2nd Day Air A.M."; break;
-					case "ups65": shipMethod = "UPS Saver"; break;
-					case "ups82": shipMethod = "UPS Today Standard"; break;
-					case "ups83": shipMethod = "UPS Today Dedicated Courier"; break;
-					case "ups85": shipMethod = "UPS Today Express"; break;
-					case "ups86": shipMethod = "UPS Today Express Saver"; break;
-				}
-
 				// Setup promo information
 				var promo = "";
 				for (var j in order.discount_codes) {
@@ -148,7 +126,7 @@ function makeOrdersFile ({orders, path}, next) {
 					line.email.value = order.email;
 
 					// Setup ship method & freight
-					line.shipMethod.value = shipMethod;
+					line.shipMethod.value = shipping.title;
 					line.shipCost.value = shipping.price;
 
 					// Setup item information
