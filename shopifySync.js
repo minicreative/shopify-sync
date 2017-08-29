@@ -6,6 +6,10 @@ var async = require('async');
 var NodeSchedule = require('node-schedule');
 var moment = require('moment');
 var SendGrid = require('sendgrid')(config.sendgridAPIKey);
+var Raven = require('raven');
+
+// Setup Raven library
+Raven.config(config.sentryAPIKey).install();
 
 // Initialize tools
 var tools = './tools/'
@@ -54,7 +58,10 @@ function runAllJobs () {
 	], function (err) {
 
 		// Log error
-	    if (err) Log.log(err);
+	    if (err) {
+			Log.log(err);
+			Raven.captureException(err);
+		}
 
 		// Email logs
 		emailLogs();
@@ -63,6 +70,13 @@ function runAllJobs () {
 
 // Email logs
 function emailLogs () {
+
+	// Don't send email if logEmail is null
+	if (!config.logEmail) {
+		Log.reset();
+		return;
+	}
+
 	console.log('Emailing logs...');
 
 	// Get messages
@@ -312,7 +326,7 @@ function captureShippedOrders (next) {
 // Run Program =================================================================
 console.log('shopify-sync started at '+Date());
 
-// Start schedule
-var syncSchedule = NodeSchedule.scheduleJob(config.schedule, function () {
+// Schedule jobs
+NodeSchedule.scheduleJob(config.schedule, function () {
 	runAllJobs();
 });
