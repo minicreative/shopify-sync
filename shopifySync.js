@@ -326,6 +326,9 @@ function captureShippedOrders (next) {
 // Run Program =================================================================
 console.log('shopify-sync started at '+Date());
 
+// Always run at launch
+runAllJobs();
+
 // Schedule jobs
 NodeSchedule.scheduleJob(config.schedule, function () {
 	runAllJobs();
