@@ -173,7 +173,7 @@ function makeOrdersFile ({orders, path}, next) {
 				'path': path,
 				'file': file,
 			}, function (err) {
-				if (!err) Log.log(path+file+ ' created');
+				if (!err) Log.log(path+ ' created');
 				callback(err);
 			});
 		},
