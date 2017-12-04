@@ -19,13 +19,9 @@ function setupFTP (next) {
 	var ftp = new FTP();
 
 	// Setup listeners
-	ftp
-		.on('ready', function () {
-			next(null, ftp);
-		})
-		.on('error', function (error) {
-			next(error);
-		});
+	ftp.on('ready', function () {
+		next(null, ftp);
+	})
 
 	// Start connection
 	ftp.connect({
