@@ -348,7 +348,6 @@ function handleInventoryFile ({file, map}, next) {
 
 						// Handle pricing
 						if (parseFloat(salePrice) < parseFloat(regPrice)) {
-							Log.log("Sale price found: " + salePrice + "/" + regPrice);
 							update.params.compare_at_price = regPrice;
 							update.params.price = salePrice;
 						} else {
