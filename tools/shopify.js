@@ -333,8 +333,7 @@ function handleInventoryFile ({file, map}, next) {
 
 					if (
 						mapVariant.quantity != quantity ||
-						mapVariant.price != salePrice ||
-						mapVariant.compare_at_price != regPrice
+						mapVariant.price != salePrice
 					) {
 
 						// Create update config
@@ -343,11 +342,19 @@ function handleInventoryFile ({file, map}, next) {
 							'upc': upc,
 							'params': {
 								'old_inventory_quantity': mapVariant.quantity,
-								'inventory_quantity': quantity,
-								'compare_at_price': regPrice,
-								'price': salePrice,
+								'inventory_quantity': quantity
 							},
 						};
+
+						// Handle pricing
+						if (parseFloat(salePrice) < parseFloat(regPrice)) {
+							Log.log("Sale price found: " + salePrice + "/" + regPrice);
+							update.params.compare_at_price = regPrice;
+							update.params.price = salePrice;
+						} else {
+							update.params.compare_at_price = 0;
+							update.params.price = regPrice;
+						}
 
 						// Push into updates array
 						updates.push(update);
