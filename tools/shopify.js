@@ -564,6 +564,7 @@ function makeProductsMap (next) {
 			for (var i in products) {
 				for (var j in products[i].variants) {
 					map[products[i].variants[j].sku] = {
+						'sku': products[i].variants[j].sku,
 						'id': products[i].variants[j].id,
 						'quantity': products[i].variants[j].inventory_quantity,
 						'price': products[i].variants[j].price,

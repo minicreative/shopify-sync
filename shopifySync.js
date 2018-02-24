@@ -118,6 +118,59 @@ function emailLogs () {
 
 };
 
+// Fix SKUs
+function fixSKUs (next) {
+
+	async.waterfall([
+
+		// Make products maps
+		function (callback) {
+			Shopify.makeProductsMap(function (err, productsMap) {
+				callback(err, productsMap);
+			})
+		},
+
+		// Setup client
+		function (productsMap, callback) {
+			Shopify.setup(function (err, client) {
+				callback(err, productsMap, client);
+			});
+		},
+
+		// Fix all SKUs
+		function (productsMap, client, callback) {
+			async.eachOfSeries(productsMap, function (product, key, callback) {
+				if (product.sku.charAt(0) !== '0') {
+					var newSKU = '0'+product.sku;
+					console.log(product.sku+" fixing to "+newSKU);
+					Shopify.setVariant({
+						client: client,
+						update: {
+							id: product.id,
+							params: {
+								sku: newSKU,
+							},
+						},
+					}, function (err) {
+						callback(err);
+					});
+				} else {
+					console.log(product.sku + " no fix needed");
+					callback();
+				}
+			}, function (err) {
+				callback(err);
+			})
+		}
+
+	], function (err) {
+		if (!err) Log.log('SKU FIX COMPLETE');
+		else Log.log('SKU FIX FAILED');
+		next(err);
+	})
+
+}
+
 // Update Inventory: updates Shopify products using the API
 function updateInventory (next) {
 	Log.log('');
