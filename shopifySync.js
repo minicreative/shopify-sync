@@ -27,6 +27,12 @@ function runAllJobs () {
 
 	async.waterfall([
 
+		// function (callback) {
+		// 	fixInventory(function (err) {
+		// 		callback(err);
+		// 	})
+		// },
+
 		// Update inventory
 		function (callback) {
 			updateInventory(function (err) {
@@ -118,8 +124,10 @@ function emailLogs () {
 
 };
 
-// Fix SKUs
-function fixSKUs (next) {
+// Fix Inventory: adaptable function for large scale inventory fixes
+function fixInventory (next) {
+
+	Log.log("FIXING INVENTORY...");
 
 	async.waterfall([
 
@@ -137,25 +145,50 @@ function fixSKUs (next) {
 			});
 		},
 
-		// Fix all SKUs
+		// // Fix all SKUs
+		// function (productsMap, client, callback) {
+		// 	async.eachOfSeries(productsMap, function (product, key, callback) {
+		// 		if (product.sku.charAt(0) !== '0') {
+		// 			var newSKU = '0'+product.sku;
+		// 			console.log(product.sku+" fixing to "+newSKU);
+		// 			Shopify.setVariant({
+		// 				client: client,
+		// 				update: {
+		// 					id: product.id,
+		// 					params: {
+		// 						sku: newSKU,
+		// 					},
+		// 				},
+		// 			}, function (err) {
+		// 				callback(err);
+		// 			});
+		// 		} else {
+		// 			console.log(product.sku + " no fix needed");
+		// 			callback();
+		// 		}
+		// 	}, function (err) {
+		// 		callback(err);
+		// 	})
+		// }
+
+		// Set all compare-at prices to zero
 		function (productsMap, client, callback) {
 			async.eachOfSeries(productsMap, function (product, key, callback) {
-				if (product.sku.charAt(0) !== '0') {
-					var newSKU = '0'+product.sku;
-					console.log(product.sku+" fixing to "+newSKU);
+				if (product.compare_at_price !== "0.00") {
 					Shopify.setVariant({
 						client: client,
 						update: {
 							id: product.id,
 							params: {
-								sku: newSKU,
+								compare_at_price: 0,
 							},
 						},
 					}, function (err) {
+						Log.log(product.sku + " compare_at_price set from " + product.compare_at_price + "to 0");
 						callback(err);
 					});
 				} else {
-					console.log(product.sku + " no fix needed");
+					Log.log(product.sku + " no fix needed, compare_at_price is " + product.compare_at_price);
 					callback();
 				}
 			}, function (err) {
@@ -164,8 +197,8 @@ function fixSKUs (next) {
 		}
 
 	], function (err) {
-		if (!err) Log.log('SKU FIX COMPLETE');
-		else Log.log('SKU FIX FAILED');
+		if (!err) Log.log('INVENTORY FIX COMPLETE');
+		else Log.log('INVENTORY FIX FAILED');
 		next(err);
 	})
 

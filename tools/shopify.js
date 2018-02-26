@@ -318,8 +318,8 @@ function handleInventoryFile ({file, map}, next) {
 				// Initialize fields from row
 				var upc = row['(C)upc'];
 				var quantity = row['(E)quantity'];
-				var regPrice = row['(F)RegPrice'];
-				var salePrice = row['(G)SalePrice'];
+				var regPrice = parseFloat(row['(F)RegPrice']);
+				var salePrice = parseFloat(row['(G)SalePrice']);
 
 				// Setup SKU & mapVariant
 				var mapVariant = null;
@@ -331,10 +331,13 @@ function handleInventoryFile ({file, map}, next) {
 				// If variant is found in map & needs an update...
 				if (mapVariant) {
 
-					if (
-						mapVariant.quantity != quantity ||
-						mapVariant.price != salePrice
-					) {
+					var quantityUpdate = mapVariant.quantity != quantity;
+					var saleUpdate = salePrice < regPrice &&
+						(mapVariant.compare_at_price != regPrice || mapVariant.price != salePrice);
+					var nonSaleUpdate = salePrice == regPrice &&
+						(mapVariant.compare_at_price > 0 || mapVariant.price != regPrice);
+
+					if (quantityUpdate || saleUpdate || nonSaleUpdate) {
 
 						// Create update config
 						var update = {
@@ -347,7 +350,7 @@ function handleInventoryFile ({file, map}, next) {
 						};
 
 						// Handle pricing
-						if (parseFloat(salePrice) < parseFloat(regPrice)) {
+						if (salePrice < regPrice) {
 							update.params.compare_at_price = regPrice;
 							update.params.price = salePrice;
 						} else {
