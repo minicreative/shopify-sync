@@ -22,6 +22,9 @@ function setupFTP (next) {
 	ftp.on('ready', function () {
 		next(null, ftp);
 	})
+	ftp.on('error', function (err) {
+		next(err);
+	});
 
 	// Start connection
 	ftp.connect({
