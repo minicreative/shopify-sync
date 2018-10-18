@@ -15,14 +15,18 @@ var config = require('./../config');
 function setupFTP (next) {
 	console.log('Setting up FTP client at '+config.ftpHost+'...');
 
+	// Initialize error flag
+	var ftpError = false;
+
 	// Initialize ftpClient
 	var ftp = new FTP();
 
 	// Setup listeners
 	ftp.on('ready', function () {
-		next(null, ftp);
+		if (!ftpError) next(null, ftp);
 	})
 	ftp.on('error', function (err) {
+		ftpError = true;
 		next(err);
 	});
 
