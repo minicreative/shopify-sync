@@ -321,6 +321,9 @@ function handleInventoryFile ({file, map}, next) {
 				var regPrice = parseFloat(row['(F)RegPrice']);
 				var salePrice = parseFloat(row['(G)SalePrice']);
 
+				// Don't handle rows with price errors
+				if (isNaN(regPrice) || isNaN(salePrice)) continue;
+
 				// Setup SKU & mapVariant
 				var mapVariant = null;
 				if (upc) {
