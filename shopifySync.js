@@ -27,12 +27,6 @@ function runAllJobs () {
 
 	async.waterfall([
 
-		// function (callback) {
-		// 	fixInventory(function (err) {
-		// 		callback(err);
-		// 	})
-		// },
-
 		// Update inventory
 		function (callback) {
 			updateInventory(function (err) {
@@ -66,7 +60,7 @@ function runAllJobs () {
 		// Log error
 	    if (err) {
 			Log.log(err);
-			Raven.captureException(err);
+			if (!config.debug) Raven.captureException(err);
 		}
 
 		// Email logs
@@ -145,31 +139,31 @@ function fixInventory (next) {
 			});
 		},
 
-		// // Fix all SKUs
-		// function (productsMap, client, callback) {
-		// 	async.eachOfSeries(productsMap, function (product, key, callback) {
-		// 		if (product.sku.charAt(0) !== '0') {
-		// 			var newSKU = '0'+product.sku;
-		// 			console.log(product.sku+" fixing to "+newSKU);
-		// 			Shopify.setVariant({
-		// 				client: client,
-		// 				update: {
-		// 					id: product.id,
-		// 					params: {
-		// 						sku: newSKU,
-		// 					},
-		// 				},
-		// 			}, function (err) {
-		// 				callback(err);
-		// 			});
-		// 		} else {
-		// 			console.log(product.sku + " no fix needed");
-		// 			callback();
-		// 		}
-		// 	}, function (err) {
-		// 		callback(err);
-		// 	})
-		// }
+		// Fix all SKUs
+		function (productsMap, client, callback) {
+			async.eachOfSeries(productsMap, function (product, key, callback) {
+				if (product.sku.charAt(0) !== '0') {
+					var newSKU = '0'+product.sku;
+					console.log(product.sku+" fixing to "+newSKU);
+					Shopify.setVariant({
+						client: client,
+						update: {
+							id: product.id,
+							params: {
+								sku: newSKU,
+							},
+						},
+					}, function (err) {
+						callback(err);
+					});
+				} else {
+					console.log(product.sku + " no fix needed");
+					callback();
+				}
+			}, function (err) {
+				callback(err);
+			})
+		},
 
 		// Set all compare-at prices to zero
 		function (productsMap, client, callback) {
