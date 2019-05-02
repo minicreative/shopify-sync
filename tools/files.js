@@ -116,19 +116,23 @@ function makeOrdersFile ({orders, path}, next) {
 					line.orderNumber.value = order.name;
 
 					// Setup address & contact information
-					line.name.value = order.shipping_address.first_name;
-					line.name2.value = order.shipping_address.last_name;
-					line.address1.value = order.shipping_address.address1;
-					line.address2.value = order.shipping_address.address2;
-					line.city.value = order.shipping_address.city;
-					line.state.value = order.shipping_address.province;
-					line.zip.value = order.shipping_address.zip;
+					if (order.shipping_address) {
+						line.name.value = order.shipping_address.first_name;
+						line.name2.value = order.shipping_address.last_name;
+						line.address1.value = order.shipping_address.address1;
+						line.address2.value = order.shipping_address.address2;
+						line.city.value = order.shipping_address.city;
+						line.state.value = order.shipping_address.province;
+						line.zip.value = order.shipping_address.zip;
+					}
 					if (order.phone) line.phone.value = order.phone;
-					line.email.value = order.email;
+					if (order.email) line.email.value = order.email;
 
 					// Setup ship method & freight
-					line.shipMethod.value = shipping.title;
-					line.shipCost.value = shipping.price;
+					if (shipping) {
+						line.shipMethod.value = shipping.title;
+						line.shipCost.value = shipping.price;
+					}
 
 					// Setup item information
 					line.sku.value = item.sku.substring(1,12);
