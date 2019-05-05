@@ -124,6 +124,18 @@ function makeOrdersFile ({orders, path}, next) {
 						line.city.value = order.shipping_address.city;
 						line.state.value = order.shipping_address.province;
 						line.zip.value = order.shipping_address.zip;
+					} else if (order.billing_address) {
+						if (order.billing_address.first_name) {
+							line.name.value = order.billing_address.first_name;
+							line.name2.value = order.billing_address.last_name;
+						} else {
+							line.name.value = order.billing_address.name;
+						}
+						line.address1.value = order.billing_address.address1;
+						line.address2.value = order.billing_address.address2;
+						line.city.value = order.billing_address.city;
+						line.state.value = order.billing_address.province;
+						line.zip.value = order.billing_address.zip;
 					}
 					if (order.phone) line.phone.value = order.phone;
 					if (order.email) line.email.value = order.email;
