@@ -29,7 +29,8 @@ function setupShopify (next) {
 	next(null, new Shopify({
 		shopName: config.shopifyShopName,
 		apiKey: config.shopifyAPIKey,
-		password: config.shopifyPassword
+		password: config.shopifyPassword,
+		apiVersion: config.shopifyVersion
 	}));
 };
 
@@ -67,47 +68,24 @@ function getProducts({params}, next) {
 			});
 		},
 
-		// Get count of products
+		// Make exhaustive product queries based on count
 		function (client, callback) {
 
-			// Setup count params
-			var countParams = JSON.parse(JSON.stringify(params));
-			delete countParams.limit;
-			delete countParams.fields;
-
-			// Get count
-			client.product.count(countParams)
-				.then(function (productCount) {
-					callback(null, client, productCount);
-				})
-				.catch(function (err) {
-					callback(err);
-				})
-		},
-
-		// Make exhaustive product queries based on count
-		function (client, productCount, callback) {
-
-			// Initialize count
-			var count = 0;
-
-			// Exhaust products based on count
-			async.whilst(function () {
-				return count < productCount;
+			// Exhaust products based on nextPageParameters
+			async.whilst(function (cb) {
+				cb(null, params !== undefined);
 			}, function (callback) {
 
-				// Setup list params
-				params.page = Math.floor(count/params.limit)+1;
+				let done = false;
 
 				// List objects
 				throttle(client, function () {
 					client.product.list(params)
 					.then(function (products) {
+						params = products.nextPageParameters;
 						for (var i in products) {
 							output.push(products[i]);
-							count++;
 						}
-						console.log(count+'/'+productCount+' products downloaded...');
 						callback();
 					})
 					.catch(function (err) {
@@ -145,47 +123,22 @@ function getOrders({params}, next) {
 			});
 		},
 
-		// Get count of orders
+		// Make exhaustive order queries based on count
 		function (client, callback) {
 
-			// Setup count params
-			var countParams = JSON.parse(JSON.stringify(params));
-			delete countParams.limit;
-			delete countParams.fields;
-
-			// Get count
-			client.order.count(countParams)
-			.then(function (orderCount) {
-				callback(null, client, orderCount);
-			})
-			.catch(function (err) {
-				callback(err);
-			})
-		},
-
-		// Make exhaustive order queries based on count
-		function (client, orderCount, callback) {
-
-			// Initialize count
-			var count = 0;
-
 			// Exhaust products based on count
-			async.whilst(function () {
-				return count < orderCount;
+			async.whilst(function (cb) {
+				cb(null, params !== undefined);
 			}, function (callback) {
-
-				// Setup list params
-				params.page = Math.floor(count/params.limit)+1;
 
 				// Make request
 				throttle(client, function () {
 					client.order.list(params)
 					.then(function (orders) {
+						params = orders.nextPageParameters;
 						for (var i in orders) {
 							output.push(orders[i]);
-							count++;
 						}
-						console.log(count+'/'+orderCount+' orders downloaded...');
 						callback();
 					})
 					.catch(function (err) {
