@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/minicreative/shopify-sync#readme",
   "dependencies": {
-    "async": "^3.0.1",
+    "async": "^3.2.2",
     "babyparse": "^0.4.6",
     "ftp": "^0.3.10",
     "lodash": ">=4.17.21",
