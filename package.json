@@ -24,6 +24,6 @@
     "raven": "^2.6.4",
     "request": "^2.88.0",
     "sendgrid": "^5.2.3",
-    "shopify-api-node": "^2.24.0"
+    "shopify-api-node": "^3.12.2"
   }
 }
